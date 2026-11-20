@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { createSeedData } from '../data/seed-data';
 import {
   Assessment,
@@ -7,17 +7,17 @@ import {
   Course,
   CourseScheduleSlot,
 } from '../models/academic.models';
+import { AuthService } from './auth.service';
 import { detectAcademicConflicts } from './conflict-engine';
-
-const COURSES_STORAGE_KEY = 'kurzusradar_courses_v1';
-const ASSESSMENTS_STORAGE_KEY = 'kurzusradar_assessments_v1';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AcademicStoreService {
+  private readonly auth = inject(AuthService);
   private readonly coursesSignal = signal<Course[]>([]);
   private readonly assessmentsSignal = signal<Assessment[]>([]);
+  private activeScope: string | null = null;
 
   readonly courses = this.coursesSignal.asReadonly();
   readonly assessments = this.assessmentsSignal.asReadonly();
@@ -80,14 +80,9 @@ export class AcademicStoreService {
   );
 
   constructor() {
-    this.hydrateFromStorage();
-
-    effect(() => {
-      this.persist(COURSES_STORAGE_KEY, this.coursesSignal());
-    });
-
-    effect(() => {
-      this.persist(ASSESSMENTS_STORAGE_KEY, this.assessmentsSignal());
+    this.hydrateForScope(this.auth.workspaceScope());
+    this.auth.scopeChanges$.subscribe((scope) => {
+      this.hydrateForScope(scope);
     });
   }
 
@@ -97,6 +92,7 @@ export class AcademicStoreService {
       id: this.generateId('course'),
     };
     this.coursesSignal.update((list) => [...list, created]);
+    this.persistCurrentScope();
     return created;
   }
 
@@ -106,6 +102,7 @@ export class AcademicStoreService {
         course.id === courseId ? { ...course, ...patch } : course
       )
     );
+    this.persistCurrentScope();
   }
 
   deleteCourse(courseId: string): void {
@@ -115,6 +112,7 @@ export class AcademicStoreService {
     this.assessmentsSignal.update((list) =>
       list.filter((item) => item.courseId !== courseId)
     );
+    this.persistCurrentScope();
   }
 
   addSlotToCourse(
@@ -132,6 +130,7 @@ export class AcademicStoreService {
           : course
       )
     );
+    this.persistCurrentScope();
   }
 
   removeSlotFromCourse(courseId: string, slotId: string): void {
@@ -145,6 +144,7 @@ export class AcademicStoreService {
           : course
       )
     );
+    this.persistCurrentScope();
   }
 
   addAssessment(input: Omit<Assessment, 'id'>): Assessment {
@@ -153,6 +153,7 @@ export class AcademicStoreService {
       id: this.generateId('assess'),
     };
     this.assessmentsSignal.update((list) => [...list, created]);
+    this.persistCurrentScope();
     return created;
   }
 
@@ -165,6 +166,7 @@ export class AcademicStoreService {
         item.id === assessmentId ? { ...item, ...patch } : item
       )
     );
+    this.persistCurrentScope();
   }
 
   updateAssessmentStatus(
@@ -178,30 +180,58 @@ export class AcademicStoreService {
     this.assessmentsSignal.update((list) =>
       list.filter((item) => item.id !== assessmentId)
     );
+    this.persistCurrentScope();
   }
 
   resetToDemoData(): void {
     const seed = createSeedData();
     this.coursesSignal.set(seed.courses);
     this.assessmentsSignal.set(seed.assessments);
+    this.persistCurrentScope();
   }
 
   clearAllData(): void {
     this.coursesSignal.set([]);
     this.assessmentsSignal.set([]);
+    this.persistCurrentScope();
   }
 
-  private hydrateFromStorage(): void {
-    if (typeof localStorage === 'undefined') {
-      this.resetToDemoData();
+  private hydrateForScope(scope: string | null): void {
+    this.activeScope = scope;
+
+    if (!scope) {
+      this.coursesSignal.set([]);
+      this.assessmentsSignal.set([]);
       return;
     }
 
-    const rawCourses = localStorage.getItem(COURSES_STORAGE_KEY);
-    const rawAssessments = localStorage.getItem(ASSESSMENTS_STORAGE_KEY);
+    if (typeof localStorage === 'undefined') {
+      if (scope === 'demo') {
+        const seed = createSeedData();
+        this.coursesSignal.set(seed.courses);
+        this.assessmentsSignal.set(seed.assessments);
+      } else {
+        this.coursesSignal.set([]);
+        this.assessmentsSignal.set([]);
+      }
+      return;
+    }
+
+    const coursesKey = this.storageKey(scope, 'courses');
+    const assessmentsKey = this.storageKey(scope, 'assessments');
+    const rawCourses = localStorage.getItem(coursesKey);
+    const rawAssessments = localStorage.getItem(assessmentsKey);
 
     if (rawCourses === null && rawAssessments === null) {
-      this.resetToDemoData();
+      if (scope === 'demo') {
+        const seed = createSeedData();
+        this.coursesSignal.set(seed.courses);
+        this.assessmentsSignal.set(seed.assessments);
+        this.persistCurrentScope();
+      } else {
+        this.coursesSignal.set([]);
+        this.assessmentsSignal.set([]);
+      }
       return;
     }
 
@@ -215,19 +245,31 @@ export class AcademicStoreService {
         Array.isArray(parsedAssessments) ? parsedAssessments : []
       );
     } catch {
-      this.resetToDemoData();
+      this.coursesSignal.set([]);
+      this.assessmentsSignal.set([]);
     }
   }
 
-  private persist(key: string, value: unknown): void {
-    if (typeof localStorage === 'undefined') {
+  private persistCurrentScope(): void {
+    if (!this.activeScope || typeof localStorage === 'undefined') {
       return;
     }
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(
+        this.storageKey(this.activeScope, 'courses'),
+        JSON.stringify(this.coursesSignal())
+      );
+      localStorage.setItem(
+        this.storageKey(this.activeScope, 'assessments'),
+        JSON.stringify(this.assessmentsSignal())
+      );
     } catch {
       return;
     }
+  }
+
+  private storageKey(scope: string, entity: 'courses' | 'assessments'): string {
+    return `kurzusradar_${scope}_${entity}_v1`;
   }
 
   private generateId(prefix: string): string {
