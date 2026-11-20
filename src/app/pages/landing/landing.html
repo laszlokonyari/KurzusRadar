@@ -1,13 +1,359 @@
-<main style="max-width: 720px; margin: 64px auto; padding: 0 24px;">
-  <h1 style="margin-bottom: 12px;">KurzusRadar</h1>
-  <p style="margin-bottom: 24px; color: var(--text-secondary);">
-    Landing oldal előkészítve. A következő lépésben építjük fel a teljes bemutató felületet.
-  </p>
-  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-    <button type="button" class="btn btn-primary" (click)="launchDemo()">
-      Élő demó kipróbálása
-    </button>
-    <a routerLink="/auth/register" class="btn btn-secondary">Regisztráció</a>
-    <a routerLink="/auth/login" class="btn btn-ghost">Bejelentkezés</a>
-  </div>
-</main>
+<div class="landing-page">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a routerLink="/" class="brand-lockup">
+        <span class="brand-mark">KR</span>
+        <div class="brand-copy">
+          <span class="brand-name">KurzusRadar</span>
+          <span class="brand-sub mono">Tanulmányi ütközésvizsgáló</span>
+        </div>
+      </a>
+
+      <nav class="topbar-links" aria-label="Oldal szakaszok">
+        <a href="#funkciok" class="nav-link">Funkciók</a>
+        <a href="#utkozesvizsgalat" class="nav-link">Ütközésmotor</a>
+        <a href="#munkateruletek" class="nav-link">Demó és fiók</a>
+      </nav>
+
+      <div class="topbar-actions">
+        @if (auth.isAuthenticated()) {
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="openActiveWorkspace()"
+          >
+            Saját munkaterület
+          </button>
+        } @else {
+          <a routerLink="/auth/login" class="btn btn-ghost">Bejelentkezés</a>
+          <a routerLink="/auth/register" class="btn btn-secondary">Regisztráció</a>
+          <button type="button" class="btn btn-primary" (click)="launchDemo()">
+            Élő demó
+          </button>
+        }
+      </div>
+    </div>
+  </header>
+
+  <section class="hero-section">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <div class="eyebrow-row">
+          <span class="eyebrow-tag mono">EGYETEMI FÉLÉVTERVEZŐ</span>
+          <span class="eyebrow-sep"></span>
+          <span class="eyebrow-note">Automatikus ütközésvizsgálattal</span>
+        </div>
+
+        <h1 class="hero-title">
+          Egyetemi tárgyak, ZH-k és beadandók egyetlen rendezett rendszerben.
+        </h1>
+
+        <p class="hero-lead">
+          Rögzítsd a féléves órarendedet és a számonkérések időpontjait. A KurzusRadar folyamatosan figyeli a közvetlen időpont-átfedéseket, a más tárgyak óráival ütköző ZH-kat és a túlterhelt vizsganapokat — még azelőtt, hogy késő lenne pótalkalmat kérni.
+        </p>
+
+        <div class="hero-actions">
+          <button
+            type="button"
+            class="btn btn-primary btn-lg"
+            (click)="launchDemo()"
+          >
+            Élő demó kipróbálása
+          </button>
+
+          @if (auth.isAuthenticated()) {
+            <button
+              type="button"
+              class="btn btn-secondary btn-lg"
+              (click)="openActiveWorkspace()"
+            >
+              Vissza a saját fiókomba
+            </button>
+          } @else {
+            <a routerLink="/auth/register" class="btn btn-secondary btn-lg">
+              Fiók létrehozása (üres lappal)
+            </a>
+          }
+        </div>
+
+        <dl class="hero-facts">
+          <div class="fact-item">
+            <dt class="fact-term mono">3 szabálytípus</dt>
+            <dd class="fact-desc">Időpont-átfedés, órarendi ütközés, napi terhelés</dd>
+          </div>
+          <div class="fact-item">
+            <dt class="fact-term mono">Izolált fiókok</dt>
+            <dd class="fact-desc">Új regisztráció mindig tiszta munkaterülettel indul</dd>
+          </div>
+          <div class="fact-item">
+            <dt class="fact-term mono">Azonnali visszajelzés</dt>
+            <dd class="fact-desc">Élő ütközés-előnézet már az űrlap kitöltése közben</dd>
+          </div>
+        </dl>
+      </div>
+
+      <aside class="surface-card inspector-preview" aria-label="Élő ütközésvizsgáló előnézet">
+        <div class="preview-header">
+          <div>
+            <span class="preview-eyebrow mono">VALÓSIDEJŰ DIAGNOSZTIKA</span>
+            <h2 class="preview-title">Próbáld ki a vizsgálómotort</h2>
+          </div>
+
+          <span
+            class="badge"
+            [class.badge-critical]="previewStatus() === 'critical'"
+            [class.badge-warning]="previewStatus() === 'warning'"
+            [class.badge-success]="previewStatus() === 'clear'"
+          >
+            @if (previewStatus() === 'critical') {
+              Kritikus ütközés
+            } @else if (previewStatus() === 'warning') {
+              Figyelmeztetés
+            } @else {
+              Ütközésmentes
+            }
+          </span>
+        </div>
+
+        <div class="scenario-tabs" role="tablist" aria-label="Példa forgatókönyvek">
+          @for (scenario of scenarios; track scenario.id) {
+            <button
+              type="button"
+              role="tab"
+              class="scenario-tab"
+              [class.is-active]="activeScenarioId() === scenario.id"
+              [attr.aria-selected]="activeScenarioId() === scenario.id"
+              (click)="selectScenario(scenario.id)"
+            >
+              {{ scenario.tabLabel }}
+            </button>
+          }
+        </div>
+
+        <div class="preview-body">
+          <p class="scenario-caption">{{ activeScenario().caption }}</p>
+
+          <div class="preview-block">
+            <span class="preview-block-label">Vizsgált számonkérések</span>
+            <div class="preview-items">
+              @for (item of activeScenario().assessments; track item.id) {
+                <div class="preview-assessment">
+                  <span
+                    class="preview-stripe"
+                    [style.background-color]="getPreviewCourseColor(item.courseId)"
+                  ></span>
+                  <div class="preview-assessment-copy">
+                    <div class="preview-assessment-top">
+                      <span class="mono preview-code">
+                        {{ getPreviewCourse(item.courseId)?.code }}
+                      </span>
+                      <span class="badge badge-neutral">{{ typeLabels[item.type] }}</span>
+                      <span class="mono preview-weight">{{ item.weightPercent }}%</span>
+                    </div>
+                    <span class="preview-assessment-title">{{ item.title }}</span>
+                    <span class="mono preview-assessment-time">
+                      {{ item.date }} · {{ item.startTime }}–{{ item.endTime }} · {{ item.location }}
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          @if (relevantSlotNote(); as slotNote) {
+            <div class="preview-slot-context">
+              <span class="preview-block-label">Heti órarendi kontextus</span>
+              <span class="mono preview-slot-value">{{ slotNote }}</span>
+            </div>
+          }
+
+          <div class="preview-block">
+            <span class="preview-block-label">
+              Motor kimenete ({{ previewConflicts().length }} észlelés)
+            </span>
+
+            @if (previewConflicts().length === 0) {
+              <div class="preview-clear-box">
+                <span class="badge badge-success">0 ütközés</span>
+                <p class="preview-clear-text">
+                  Az átütemezett időpontok nem fedik át egymást, nem ütköznek más tárgyak óráival, és a napi súlyozás is a küszöbérték alatt marad.
+                </p>
+              </div>
+            } @else {
+              <div class="preview-results">
+                @for (conflict of previewConflicts(); track conflict.id) {
+                  <div
+                    class="preview-conflict"
+                    [class.is-critical]="conflict.severity === 'critical'"
+                    [class.is-warning]="conflict.severity === 'warning'"
+                  >
+                    <div class="preview-conflict-top">
+                      <span
+                        class="badge"
+                        [class.badge-critical]="conflict.severity === 'critical'"
+                        [class.badge-warning]="conflict.severity === 'warning'"
+                      >
+                        {{ formatCategory(conflict.category) }}
+                      </span>
+                      <span class="mono preview-conflict-date">{{ conflict.date }}</span>
+                    </div>
+                    <p class="preview-conflict-title">{{ conflict.title }}</p>
+                    <p class="preview-conflict-desc">{{ conflict.description }}</p>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="funkciok" class="content-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-eyebrow mono">01 / MODULOK</span>
+        <h2 class="section-heading">Minden nézet egy konkrét féléves döntést támogat</h2>
+      </div>
+
+      <div class="feature-grid">
+        <article class="surface-card feature-card">
+          <span class="feature-index mono">A</span>
+          <h3 class="feature-title">Tárgyak és heti órarendi rács</h3>
+          <p class="feature-copy">
+            Kurzusok kezelése tárgykóddal, kreditértékkel, oktatóval és egyedi jelölőszínnel. A heti órarend-mátrix automatikusan oszlopokba rendezi az előadásokat, gyakorlatokat és laborokat, és külön jelzi az órák közötti átfedéseket is.
+          </p>
+        </article>
+
+        <article class="surface-card feature-card">
+          <span class="feature-index mono">B</span>
+          <h3 class="feature-title">ZH-k, vizsgák és beadandók</h3>
+          <p class="feature-copy">
+            Szűrhető, kereshető nyilvántartó súlyozással, helyszínnel és státuszfolyamattal (tervezett, folyamatban, leadva, értékelve). Új esemény rögzítésekor az élő előnézet még mentés előtt megmutatja a várható ütközéseket.
+          </p>
+        </article>
+
+        <article class="surface-card feature-card">
+          <span class="feature-index mono">C</span>
+          <h3 class="feature-title">Ütközésdiagnosztika és idővonal</h3>
+          <p class="feature-copy">
+            Kategóriákra bontott hibanézet közvetlen átütemezéssel: a kártyáról azonnal módosíthatod a dátumot vagy az idősávot. A kronológiai ütemterv naponként egymás mellé teszi a határidőket és az aznapi tanóráidat.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="utkozesvizsgalat" class="content-section section-tinted">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-eyebrow mono">02 / ÜTKÖZÉSMOTOR</span>
+        <h2 class="section-heading">Három determinisztikus szabály, zaj és találgatás nélkül</h2>
+      </div>
+
+      <div class="rules-table surface-card">
+        <div class="rule-row">
+          <div class="rule-badge-col">
+            <span class="badge badge-critical">Kritikus</span>
+          </div>
+          <div class="rule-name-col">
+            <h3 class="rule-title">Időpont-ütközés</h3>
+            <span class="rule-code mono">time_overlap</span>
+          </div>
+          <p class="rule-desc">
+            Két aktív, idősávhoz kötött számonkérés intervalluma átfedi egymást ugyanazon a napon (t₁_kezd &lt; t₂_vég ∧ t₂_kezd &lt; t₁_vég). A már leadott vagy értékelt feladatokat a motor automatikusan figyelmen kívül hagyja.
+          </p>
+        </div>
+
+        <div class="rule-row">
+          <div class="rule-badge-col">
+            <span class="badge badge-warning">Figyelmeztetés</span>
+          </div>
+          <div class="rule-name-col">
+            <h3 class="rule-title">Órarendi átfedés</h3>
+            <span class="rule-code mono">class_collision</span>
+          </div>
+          <p class="rule-desc">
+            Egy időponthoz kötött ZH vagy vizsga belelóg egy másik tárgyad adott hétköznapi órájába. A saját tárgy óráján írt zárthelyit a rendszer szándékosan nem jelöli hibának.
+          </p>
+        </div>
+
+        <div class="rule-row">
+          <div class="rule-badge-col">
+            <span class="badge badge-warning">Figyelmeztetés</span>
+          </div>
+          <div class="rule-name-col">
+            <h3 class="rule-title">Napi terhelési csúcs</h3>
+            <span class="rule-code mono">daily_overload</span>
+          </div>
+          <p class="rule-desc">
+            Jelzi, ha egyetlen napra legalább 2 ZH/vizsga, 3 vagy több nyitott határidő, illetve összesen legalább 40% félévi súly koncentrálódik — még akkor is, ha az időpontok papíron nem fedik egymást.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="munkateruletek" class="content-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-eyebrow mono">03 / KEZDÉS</span>
+        <h2 class="section-heading">Két teljesen különálló munkamód</h2>
+      </div>
+
+      <div class="modes-grid">
+        <article class="surface-card mode-card">
+          <div class="mode-head">
+            <span class="badge badge-neutral">Azonnali kipróbálás</span>
+            <h3 class="mode-title">Élő demó munkaterület</h3>
+          </div>
+          <p class="mode-copy">
+            Előre feltöltött mintafélév 4 tárggyal, heti órarenddel és valós ütközésekkel. Bármit szerkeszthetsz, átütemezhetsz vagy kiüríthetsz, és bármikor egyetlen kattintással visszaállíthatod az eredeti mintaállapotot.
+          </p>
+          <div class="mode-footer">
+            <button type="button" class="btn btn-primary" (click)="launchDemo()">
+              Élő demó indítása
+            </button>
+          </div>
+        </article>
+
+        <article class="surface-card mode-card mode-card-account">
+          <div class="mode-head">
+            <span class="badge badge-success">Tiszta lap</span>
+            <h3 class="mode-title">Saját felhasználói fiók</h3>
+          </div>
+          <p class="mode-copy">
+            Minden újonnan regisztrált fiók üres munkaterülettel indul, teljesen elkülönítve a demó adatoktól és más fiókoktól. Ide kizárólag a saját tárgyaid, óráid és határidőid kerülnek.
+          </p>
+          <div class="mode-footer">
+            <a routerLink="/auth/register" class="btn btn-secondary">
+              Regisztráció
+            </a>
+            <a routerLink="/auth/login" class="btn btn-ghost">
+              Bejelentkezés
+            </a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <footer class="landing-footer">
+    <div class="container footer-inner">
+      <div class="footer-left">
+        <span class="brand-mark brand-mark-sm">KR</span>
+        <span class="footer-copy">
+          KurzusRadar · Angular + TypeScript féléves tervező és ütközésvizsgáló
+        </span>
+      </div>
+
+      <div class="footer-links">
+        <button type="button" class="footer-link-btn" (click)="launchDemo()">
+          Élő demó
+        </button>
+        <a routerLink="/auth/login" class="footer-link">Bejelentkezés</a>
+        <a routerLink="/auth/register" class="footer-link">Regisztráció</a>
+      </div>
+    </div>
+  </footer>
+</div>
