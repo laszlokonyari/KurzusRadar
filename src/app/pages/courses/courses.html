@@ -1,4 +1,392 @@
-<section class="page-placeholder">
-  <h1>Tárgyak és órarend</h1>
-  <p>Kurzuskezelő modul előkészítve.</p>
+<header class="page-header">
+  <div class="header-copy">
+    <span class="header-eyebrow mono">
+      {{ store.courses().length }} tárgy · {{ store.totalCredits() }} kredit · {{ totalWeeklyHours() }} óra/hét
+    </span>
+    <h1 class="page-title">Tárgyak és órarend</h1>
+  </div>
+
+  <div class="header-actions">
+    @if (!courseFormOpen()) {
+      <button type="button" class="btn btn-primary" (click)="openCreateForm()">
+        Új tárgy felvétele
+      </button>
+    } @else {
+      <button type="button" class="btn btn-secondary" (click)="closeCourseForm()">
+        Űrlap bezárása
+      </button>
+    }
+  </div>
+</header>
+
+@if (courseFormOpen()) {
+  <section class="surface-card form-panel" aria-label="Tárgy szerkesztése">
+    <div class="panel-header">
+      <div>
+        <h2 class="section-title">
+          @if (editingCourseId()) {
+            Tárgy adatainak módosítása
+          } @else {
+            Új egyetemi tárgy rögzítése
+          }
+        </h2>
+        <p class="section-subtitle">
+          A kurzus színkódja a teljes alkalmazásban és az órarendben is egységesen jelenik meg
+        </p>
+      </div>
+    </div>
+
+    <form class="course-form" [formGroup]="courseForm" (ngSubmit)="submitCourseForm()">
+      <div class="form-grid">
+        <div class="field-group">
+          <label class="field-label" for="course-code">Tárgykód</label>
+          <input
+            id="course-code"
+            type="text"
+            class="field-input mono"
+            formControlName="code"
+            placeholder="pl. VIAU-A01"
+          />
+        </div>
+
+        <div class="field-group field-span-2">
+          <label class="field-label" for="course-name">Tárgy megnevezése</label>
+          <input
+            id="course-name"
+            type="text"
+            class="field-input"
+            formControlName="name"
+            placeholder="pl. Algoritmusok és adatszerkezetek"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="course-credits">Kredit</label>
+          <input
+            id="course-credits"
+            type="number"
+            min="1"
+            max="30"
+            class="field-input mono"
+            formControlName="credits"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="course-instructor">Oktató</label>
+          <input
+            id="course-instructor"
+            type="text"
+            class="field-input"
+            formControlName="instructor"
+            placeholder="pl. Dr. Kovács Bence"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="course-semester">Félév</label>
+          <input
+            id="course-semester"
+            type="text"
+            class="field-input mono"
+            formControlName="semester"
+            placeholder="2026/27/1"
+          />
+        </div>
+
+        <div class="field-group field-span-2">
+          <span class="field-label">Jelölőszín</span>
+          <div class="color-picker">
+            @for (option of colorOptions; track option.token) {
+              <button
+                type="button"
+                class="color-chip"
+                [class.is-selected]="courseForm.controls.colorToken.value === option.token"
+                (click)="selectColor(option.token)"
+              >
+                <span
+                  class="color-chip-dot"
+                  [style.background-color]="option.hex"
+                ></span>
+                <span>{{ option.label }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="form-footer">
+        <button type="button" class="btn btn-ghost" (click)="closeCourseForm()">
+          Mégse
+        </button>
+        <button type="submit" class="btn btn-primary">
+          @if (editingCourseId()) {
+            Módosítások mentése
+          } @else {
+            Tárgy mentése
+          }
+        </button>
+      </div>
+    </form>
+  </section>
+}
+
+<section class="surface-card timetable-panel" aria-label="Heti órarend">
+  <div class="panel-header">
+    <div>
+      <h2 class="section-title">Heti órarendi rács</h2>
+      <p class="section-subtitle">
+        Összesen {{ totalSlotCount() }} rögzített tanóra · az ütközésvizsgáló ezeket összeveti a ZH-időpontokkal
+      </p>
+    </div>
+
+    @if (overlappingSlotIds().size > 0) {
+      <span class="badge badge-critical">Órarendi átfedés észlelve</span>
+    } @else if (totalSlotCount() > 0) {
+      <span class="badge badge-success">Órarend ütközésmentes</span>
+    }
+  </div>
+
+  <div
+    class="timetable-grid"
+    [style.grid-template-columns]="'repeat(' + timetableColumns().length + ', minmax(0, 1fr))'"
+  >
+    @for (column of timetableColumns(); track column.day) {
+      <div class="day-column">
+        <div class="day-column-head">
+          <span class="day-name">{{ column.label }}</span>
+          <span class="day-count mono">{{ column.entries.length }}</span>
+        </div>
+
+        <div class="day-column-body">
+          @if (column.entries.length === 0) {
+            <span class="day-empty">Szabad nap</span>
+          } @else {
+            @for (entry of column.entries; track entry.slot.id) {
+              <div
+                class="timetable-block"
+                [class.has-overlap]="entry.hasOverlap"
+                [style.border-left-color]="entry.color"
+              >
+                <div class="block-top">
+                  <span class="block-time mono">
+                    {{ entry.slot.startTime }}–{{ entry.slot.endTime }}
+                  </span>
+                  @if (entry.hasOverlap) {
+                    <span class="overlap-flag">Ütközik</span>
+                  }
+                </div>
+                <span class="block-code mono">{{ entry.course.code }}</span>
+                <span class="block-name">{{ entry.course.name }}</span>
+                <div class="block-meta">
+                  <span>{{ slotTypeLabels[entry.slot.type] }}</span>
+                  <span class="mono">{{ entry.slot.room }}</span>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+    }
+  </div>
+</section>
+
+<section class="courses-section" aria-label="Felvett tárgyak listája">
+  <div class="section-bar">
+    <h2 class="section-title">Felvett kurzusok</h2>
+    <span class="section-meta mono">{{ store.courses().length }} aktív tárgy</span>
+  </div>
+
+  @if (store.courses().length === 0) {
+    <div class="surface-card empty-state">
+      <p class="empty-title">Még nincs rögzített tárgyad</p>
+      <p class="empty-copy">
+        Adj hozzá legalább egy egyetemi tárgyat és add meg a heti óráit, hogy a ZH-k ütközésvizsgálata teljes legyen.
+      </p>
+      <button type="button" class="btn btn-primary" (click)="openCreateForm()">
+        Első tárgy felvétele
+      </button>
+    </div>
+  } @else {
+    <div class="course-cards-grid">
+      @for (course of store.courses(); track course.id) {
+        <article class="surface-card course-card">
+          <div
+            class="course-card-bar"
+            [style.background-color]="colorMap[course.colorToken]"
+          ></div>
+
+          <div class="course-card-inner">
+            <div class="course-card-head">
+              <div class="course-identity">
+                <div class="course-badges">
+                  <span class="course-code-pill mono">{{ course.code }}</span>
+                  <span class="badge badge-neutral mono">{{ course.credits }} kr</span>
+                  <span class="badge badge-neutral mono">
+                    {{ linkedAssessmentCount(course.id) }} feladat
+                  </span>
+                </div>
+                <h3 class="course-name">{{ course.name }}</h3>
+                <p class="course-meta">
+                  {{ course.instructor }} · <span class="mono">{{ course.semester }}</span>
+                </p>
+              </div>
+
+              <div class="course-card-actions">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  (click)="openEditForm(course)"
+                >
+                  Szerkesztés
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm btn-text-danger"
+                  (click)="requestDeleteCourse(course.id)"
+                >
+                  Törlés
+                </button>
+              </div>
+            </div>
+
+            @if (confirmDeleteCourseId() === course.id) {
+              <div class="delete-confirm-bar">
+                <span class="delete-confirm-text">
+                  Biztosan törlöd a tárgyat?
+                  @if (linkedAssessmentCount(course.id) > 0) {
+                    ({{ linkedAssessmentCount(course.id) }} kapcsolódó feladat is törlődik.)
+                  }
+                </span>
+                <div class="delete-confirm-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    (click)="cancelDeleteCourse()"
+                  >
+                    Mégse
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                    (click)="confirmDeleteCourse(course.id)"
+                  >
+                    Törlés megerősítése
+                  </button>
+                </div>
+              </div>
+            }
+
+            <div class="slots-area">
+              <div class="slots-head">
+                <span class="slots-label">Heti órarendi sávok</span>
+                <button
+                  type="button"
+                  class="inline-link-btn"
+                  (click)="toggleSlotForm(course.id)"
+                >
+                  @if (activeSlotCourseId() === course.id) {
+                    Bezárás
+                  } @else {
+                    + Óra hozzáadása
+                  }
+                </button>
+              </div>
+
+              @if (course.slots.length === 0) {
+                <p class="slots-empty">Nincs megadott heti tanóra ehhez a tárgyhoz.</p>
+              } @else {
+                <div class="slot-list">
+                  @for (slot of sortedSlots(course.slots); track slot.id) {
+                    <div
+                      class="slot-row"
+                      [class.has-overlap]="overlappingSlotIds().has(slot.id)"
+                    >
+                      <span class="slot-day">{{ dayLabels[slot.dayOfWeek] }}</span>
+                      <span class="slot-time mono">{{ slot.startTime }}–{{ slot.endTime }}</span>
+                      <span class="badge badge-neutral">{{ slotTypeLabels[slot.type] }}</span>
+                      <span class="slot-room mono">{{ slot.room }}</span>
+                      <button
+                        type="button"
+                        class="slot-remove-btn"
+                        (click)="removeSlot(course.id, slot.id)"
+                        aria-label="Órarendi sáv törlése"
+                      >
+                        Eltávolítás
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (activeSlotCourseId() === course.id) {
+                <form
+                  class="slot-form"
+                  [formGroup]="slotForm"
+                  (ngSubmit)="submitSlotForm(course.id)"
+                >
+                  <div class="slot-form-grid">
+                    <div>
+                      <label class="field-label">Nap</label>
+                      <select class="field-select" formControlName="dayOfWeek">
+                        @for (day of allDays; track day) {
+                          <option [ngValue]="day">{{ dayLabels[day] }}</option>
+                        }
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="field-label">Típus</label>
+                      <select class="field-select" formControlName="type">
+                        @for (type of slotTypes; track type) {
+                          <option [value]="type">{{ slotTypeLabels[type] }}</option>
+                        }
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="field-label">Kezdés</label>
+                      <input type="time" class="field-input mono" formControlName="startTime" />
+                    </div>
+
+                    <div>
+                      <label class="field-label">Vége</label>
+                      <input type="time" class="field-input mono" formControlName="endTime" />
+                    </div>
+
+                    <div class="slot-room-field">
+                      <label class="field-label">Terem</label>
+                      <input
+                        type="text"
+                        class="field-input mono"
+                        formControlName="room"
+                        placeholder="pl. IB028"
+                      />
+                    </div>
+                  </div>
+
+                  @if (slotError()) {
+                    <p class="slot-error">{{ slotError() }}</p>
+                  }
+
+                  <div class="slot-form-footer">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      (click)="toggleSlotForm(course.id)"
+                    >
+                      Mégse
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                      Óra rögzítése
+                    </button>
+                  </div>
+                </form>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
 </section>
