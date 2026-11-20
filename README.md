@@ -1,5 +1,7 @@
 # KurzusRadar
 
+**Live Demo & Production App:** [https://kurzusradar.site](https://kurzusradar.site)
+
 Full-stack university course, exam, and assignment planner with deterministic conflict detection, an isolated client-side Live Demo, and PostgreSQL-backed user accounts.
 
 The application UI is written in Hungarian for authentic university workflows, while the architecture, codebase, and documentation follow standard TypeScript engineering conventions.
