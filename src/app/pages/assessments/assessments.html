@@ -1,4 +1,442 @@
-<section class="page-placeholder">
-  <h1>ZH-k és beadandók</h1>
-  <p>Számonkérés-nyilvántartó modul előkészítve.</p>
+<header class="page-header">
+  <div class="header-copy">
+    <span class="header-eyebrow mono">
+      {{ store.assessments().length }} rögzített · {{ store.activeAssessmentsCount() }} nyitott · {{ conflictingAssessmentCount() }} ütközésben érintett
+    </span>
+    <h1 class="page-title">ZH-k és beadandók</h1>
+  </div>
+
+  <div class="header-actions">
+    @if (store.courses().length > 0) {
+      @if (!formOpen()) {
+        <button type="button" class="btn btn-primary" (click)="openCreateForm()">
+          Új számonkérés
+        </button>
+      } @else {
+        <button type="button" class="btn btn-secondary" (click)="closeForm()">
+          Űrlap bezárása
+        </button>
+      }
+    } @else {
+      <a routerLink="/courses" class="btn btn-primary">Előbb vegyél fel tárgyat</a>
+    }
+  </div>
+</header>
+
+@if (formOpen()) {
+  <section class="surface-card form-panel" aria-label="Számonkérés szerkesztése">
+    <div class="panel-header">
+      <div>
+        <h2 class="section-title">
+          @if (editingAssessmentId()) {
+            Számonkérés módosítása
+          } @else {
+            Új ZH, beadandó vagy vizsga rögzítése
+          }
+        </h2>
+        <p class="section-subtitle">
+          Az ütközésvizsgáló valós időben ellenőrzi a megadott dátumot és idősávot mentés előtt
+        </p>
+      </div>
+    </div>
+
+    <form class="assessment-form" [formGroup]="assessmentForm" (ngSubmit)="submitForm()">
+      <div class="form-grid">
+        <div class="field-group">
+          <label class="field-label" for="assess-course">Tárgy</label>
+          <select id="assess-course" class="field-select" formControlName="courseId">
+            @for (course of store.courses(); track course.id) {
+              <option [value]="course.id">{{ course.code }} — {{ course.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field-group field-span-2">
+          <label class="field-label" for="assess-title">Megnevezés</label>
+          <input
+            id="assess-title"
+            type="text"
+            class="field-input"
+            formControlName="title"
+            placeholder="pl. 2. Nagy Zárthelyi vagy Labor beadandó"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-type">Típus</label>
+          <select id="assess-type" class="field-select" formControlName="type">
+            @for (type of typeOptions; track type) {
+              <option [value]="type">{{ typeLabels[type] }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-date">Dátum / Határidő</label>
+          <input
+            id="assess-date"
+            type="date"
+            class="field-input mono"
+            formControlName="date"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-weight">Súlyozás (%)</label>
+          <input
+            id="assess-weight"
+            type="number"
+            min="0"
+            max="100"
+            class="field-input mono"
+            formControlName="weightPercent"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-start">Kezdés (opcionális)</label>
+          <input
+            id="assess-start"
+            type="time"
+            class="field-input mono"
+            formControlName="startTime"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-end">Befejezés (opcionális)</label>
+          <input
+            id="assess-end"
+            type="time"
+            class="field-input mono"
+            formControlName="endTime"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-status">Státusz</label>
+          <select id="assess-status" class="field-select" formControlName="status">
+            @for (status of statusOptions; track status) {
+              <option [value]="status">{{ statusLabels[status] }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="assess-location">Helyszín / Terem (opcionális)</label>
+          <input
+            id="assess-location"
+            type="text"
+            class="field-input"
+            formControlName="location"
+            placeholder="pl. Q-I előadó vagy Moodle"
+          />
+        </div>
+
+        <div class="field-group field-span-2">
+          <label class="field-label" for="assess-notes">Megjegyzés (opcionális)</label>
+          <input
+            id="assess-notes"
+            type="text"
+            class="field-input"
+            formControlName="notes"
+            placeholder="Segédlet, leadási formátum, pótlási feltétel"
+          />
+        </div>
+      </div>
+
+      @if (previewConflicts().length > 0) {
+        <div class="preview-conflicts">
+          <div class="preview-head">
+            <span class="preview-title">Élő ütközés-előnézet</span>
+            <span class="preview-count mono">{{ previewConflicts().length }} észlelés</span>
+          </div>
+
+          <div class="preview-list">
+            @for (conflict of previewConflicts(); track conflict.id) {
+              <div
+                class="preview-item"
+                [class.is-critical]="conflict.severity === 'critical'"
+                [class.is-warning]="conflict.severity === 'warning'"
+              >
+                <span
+                  class="badge"
+                  [class.badge-critical]="conflict.severity === 'critical'"
+                  [class.badge-warning]="conflict.severity === 'warning'"
+                >
+                  {{ formatCategory(conflict.category) }}
+                </span>
+                <span class="preview-desc">{{ conflict.description }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (formError()) {
+        <p class="form-error">{{ formError() }}</p>
+      }
+
+      <div class="form-footer">
+        <button type="button" class="btn btn-ghost" (click)="closeForm()">
+          Mégse
+        </button>
+        <button type="submit" class="btn btn-primary">
+          @if (editingAssessmentId()) {
+            Módosítások mentése
+          } @else {
+            Számonkérés mentése
+          }
+        </button>
+      </div>
+    </form>
+  </section>
+}
+
+<section class="surface-card filter-toolbar" aria-label="Szűrők">
+  <div class="filter-row">
+    <div class="search-wrap">
+      <input
+        type="search"
+        class="field-input"
+        [value]="searchQuery()"
+        (input)="handleSearchInput($event)"
+        placeholder="Keresés cím, tárgykód, terem vagy megjegyzés alapján..."
+        aria-label="Keresés a számonkérések között"
+      />
+    </div>
+
+    <select
+      class="field-select filter-select"
+      [value]="courseFilter()"
+      (change)="handleCourseFilter($event)"
+      aria-label="Szűrés tárgyra"
+    >
+      <option value="all">Minden tárgy</option>
+      @for (course of store.courses(); track course.id) {
+        <option [value]="course.id">{{ course.code }} — {{ course.name }}</option>
+      }
+    </select>
+
+    <select
+      class="field-select filter-select"
+      [value]="typeFilter()"
+      (change)="handleTypeFilter($event)"
+      aria-label="Szűrés típusra"
+    >
+      <option value="all">Minden típus</option>
+      @for (type of typeOptions; track type) {
+        <option [value]="type">{{ typeLabels[type] }}</option>
+      }
+    </select>
+
+    <select
+      class="field-select filter-select"
+      [value]="statusFilter()"
+      (change)="handleStatusFilter($event)"
+      aria-label="Szűrés státuszra"
+    >
+      <option value="all">Minden státusz</option>
+      <option value="open">Csak nyitottak</option>
+      @for (status of statusOptions; track status) {
+        <option [value]="status">{{ statusLabels[status] }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="filter-secondary-row">
+    <div class="filter-left-tools">
+      <button
+        type="button"
+        class="conflict-toggle"
+        [class.is-active]="onlyConflicting()"
+        (click)="toggleOnlyConflicting()"
+      >
+        <span>Csak ütközők</span>
+        <span class="toggle-count mono">{{ conflictingAssessmentCount() }}</span>
+      </button>
+
+      @if (hasActiveFilters()) {
+        <button type="button" class="inline-reset-btn" (click)="resetFilters()">
+          Szűrők törlése
+        </button>
+      }
+    </div>
+
+    <div class="sort-wrap">
+      <label class="sort-label" for="assess-sort">Rendezés:</label>
+      <select
+        id="assess-sort"
+        class="sort-select"
+        [value]="sortMode()"
+        (change)="handleSortChange($event)"
+      >
+        <option value="date_asc">Dátum szerint növekvő</option>
+        <option value="date_desc">Dátum szerint csökkenő</option>
+        <option value="weight_desc">Súlyozás szerint csökkenő</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<section class="surface-card list-panel" aria-label="Számonkérések listája">
+  <div class="list-header">
+    <span class="list-count mono">
+      {{ filteredAssessments().length }} találat
+      @if (hasActiveFilters()) {
+        ({{ store.assessments().length }} összesen)
+      }
+    </span>
+    <a routerLink="/conflicts" class="panel-link">Ütközésdiagnosztika megnyitása</a>
+  </div>
+
+  @if (store.courses().length === 0) {
+    <div class="empty-state">
+      <p class="empty-title">Nincs felvett egyetemi tárgy</p>
+      <p class="empty-copy">
+        Előbb vegyél fel legalább egy tárgyat a Tárgyak és órarend oldalon, utána tudsz hozzá ZH-kat és beadandókat rendelni.
+      </p>
+      <a routerLink="/courses" class="btn btn-primary">Ugrás a tárgyakhoz</a>
+    </div>
+  } @else if (filteredAssessments().length === 0) {
+    <div class="empty-state">
+      @if (hasActiveFilters()) {
+        <p class="empty-title">Nincs a szűrőknek megfelelő számonkérés</p>
+        <p class="empty-copy">Módosítsd a szűrőfeltételeket vagy állítsd alaphelyzetbe a listát.</p>
+        <button type="button" class="btn btn-secondary" (click)="resetFilters()">
+          Szűrők törlése
+        </button>
+      } @else {
+        <p class="empty-title">Még nincs rögzített ZH vagy beadandó</p>
+        <p class="empty-copy">
+          Vedd fel az első határidőt, és a rendszer automatikusan figyeli a napi terhelést és az időpont-ütközéseket.
+        </p>
+        <button type="button" class="btn btn-primary" (click)="openCreateForm()">
+          Első számonkérés felvétele
+        </button>
+      }
+    </div>
+  } @else {
+    <div class="assessment-list">
+      @for (item of filteredAssessments(); track item.id) {
+        <article
+          class="assessment-row"
+          [class.is-completed]="isCompleted(item.status)"
+          [class.has-critical]="hasCriticalConflict(item.id)"
+        >
+          <span
+            class="course-stripe"
+            [style.background-color]="getCourseColor(item.courseId)"
+          ></span>
+
+          <div class="row-main">
+            <div class="row-top-meta">
+              <span class="course-code-pill mono">
+                {{ getCourse(item.courseId)?.code ?? 'ISMERETLEN' }}
+              </span>
+              <span class="course-name-muted">
+                {{ getCourse(item.courseId)?.name ?? '' }}
+              </span>
+              <span class="badge badge-neutral">{{ typeLabels[item.type] }}</span>
+              <span class="weight-chip mono">{{ item.weightPercent }}%</span>
+
+              @if (hasCriticalConflict(item.id)) {
+                <span class="badge badge-critical">Kritikus ütközés</span>
+              } @else if (getConflicts(item.id).length > 0) {
+                <span class="badge badge-warning">Figyelmeztetés</span>
+              }
+            </div>
+
+            <h3 class="row-title">{{ item.title }}</h3>
+
+            <div class="row-schedule mono">
+              <span>{{ formatDateLabel(item.date) }}</span>
+              @if (item.startTime && item.endTime) {
+                <span class="dot-sep"></span>
+                <span>{{ item.startTime }}–{{ item.endTime }}</span>
+              } @else {
+                <span class="dot-sep"></span>
+                <span>Egész napos határidő</span>
+              }
+              @if (item.location) {
+                <span class="dot-sep"></span>
+                <span>{{ item.location }}</span>
+              }
+            </div>
+
+            @if (item.notes) {
+              <p class="row-notes">{{ item.notes }}</p>
+            }
+
+            @if (getConflicts(item.id).length > 0) {
+              <div class="inline-conflicts">
+                @for (conflict of getConflicts(item.id); track conflict.id) {
+                  <div
+                    class="inline-conflict-pill"
+                    [class.is-critical]="conflict.severity === 'critical'"
+                    [class.is-warning]="conflict.severity === 'warning'"
+                  >
+                    <strong>{{ formatCategory(conflict.category) }}:</strong>
+                    <span>{{ conflict.description }}</span>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (confirmDeleteId() === item.id) {
+              <div class="delete-confirm-bar">
+                <span class="delete-confirm-text">Biztosan törlöd ezt a számonkérést?</span>
+                <div class="delete-confirm-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    (click)="cancelDelete()"
+                  >
+                    Mégse
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                    (click)="confirmDelete(item.id)"
+                  >
+                    Törlés
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="row-actions">
+            <select
+              class="inline-status-select"
+              [value]="item.status"
+              (change)="handleInlineStatusChange(item.id, $event)"
+              [attr.aria-label]="item.title + ' státusza'"
+            >
+              @for (status of statusOptions; track status) {
+                <option [value]="status">{{ statusLabels[status] }}</option>
+              }
+            </select>
+
+            <div class="row-btn-group">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                (click)="openEditForm(item)"
+              >
+                Szerkesztés
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-text-danger"
+                (click)="requestDelete(item.id)"
+              >
+                Törlés
+              </button>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
 </section>
