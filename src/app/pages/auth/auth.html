@@ -1,13 +1,284 @@
-<main style="max-width: 480px; margin: 64px auto; padding: 0 24px;">
-  <h1 style="margin-bottom: 12px;">
-    @if (mode === 'register') {
-      Regisztráció
-    } @else {
-      Bejelentkezés
-    }
-  </h1>
-  <p style="margin-bottom: 24px; color: var(--text-secondary);">
-    Az autentikációs felületet a 11. lépésben építjük ki.
-  </p>
-  <a routerLink="/" class="btn btn-secondary">Vissza a kezdőlapra</a>
-</main>
+<div class="auth-shell">
+  <aside class="auth-aside">
+    <div class="aside-top">
+      <a routerLink="/" class="brand-lockup">
+        <span class="brand-mark">KR</span>
+        <div class="brand-copy">
+          <span class="brand-name">KurzusRadar</span>
+          <span class="brand-sub mono">Tanulmányi tervező</span>
+        </div>
+      </a>
+
+      <a routerLink="/" class="back-link">Vissza a kezdőlapra</a>
+    </div>
+
+    <div class="aside-main">
+      <span class="aside-eyebrow mono">SZEMÉLYES MUNKATERÜLET</span>
+      <h1 class="aside-title">
+        @if (mode() === 'register') {
+          Indíts tiszta lappal, mintaadatok nélkül.
+        } @else {
+          Folytasd ott, ahol abbahagytad.
+        }
+      </h1>
+      <p class="aside-lead">
+        Minden fiók saját, elkülönített munkaterületet kap. A tárgyaid, órarendi sávjaid és ZH-határidőid nem keverednek az élő demó adataival.
+      </p>
+
+      <ul class="aside-specs">
+        <li class="spec-item">
+          <span class="spec-code mono">01</span>
+          <div class="spec-copy">
+            <strong>Üres induló állapot</strong>
+            <span>Regisztráció után semmilyen mintaadatot nem kell kézzel törölnöd.</span>
+          </div>
+        </li>
+        <li class="spec-item">
+          <span class="spec-code mono">02</span>
+          <div class="spec-copy">
+            <strong>Automatikus ütközésvizsgálat</strong>
+            <span>Minden új ZH és tanóra felvételekor azonnal fut a diagnosztika.</span>
+          </div>
+        </li>
+        <li class="spec-item">
+          <span class="spec-code mono">03</span>
+          <div class="spec-copy">
+            <strong>Fiókonként izolált mentés</strong>
+            <span>Több külön fiók is kezelhető egymástól függetlenül ugyanabban a böngészőben.</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <div class="aside-footer">
+      <p class="storage-note">
+        Helyi előnézeti hitelesítés: a fiókadatok ebben a verzióban a böngésződ <span class="mono">localStorage</span> tárában maradnak, a későbbi backend API közvetlenül az <span class="mono">AuthService</span> rétegbe köthető be.
+      </p>
+
+      <button type="button" class="aside-demo-btn" (click)="launchDemo()">
+        Inkább az élő demót nézném meg
+      </button>
+    </div>
+  </aside>
+
+  <main class="auth-stage">
+    <div class="mobile-auth-header">
+      <a routerLink="/" class="brand-lockup is-light">
+        <span class="brand-mark is-dark">KR</span>
+        <span class="brand-name-dark">KurzusRadar</span>
+      </a>
+      <a routerLink="/" class="mobile-back-link">Kezdőlap</a>
+    </div>
+
+    <div class="auth-card surface-card">
+      <div class="mode-tabs" role="tablist" aria-label="Fiók műveletek">
+        <a
+          routerLink="/auth/login"
+          role="tab"
+          class="mode-tab"
+          [class.is-active]="mode() === 'login'"
+          [attr.aria-selected]="mode() === 'login'"
+        >
+          Bejelentkezés
+        </a>
+        <a
+          routerLink="/auth/register"
+          role="tab"
+          class="mode-tab"
+          [class.is-active]="mode() === 'register'"
+          [attr.aria-selected]="mode() === 'register'"
+        >
+          Regisztráció
+        </a>
+      </div>
+
+      <div class="card-body">
+        @if (mode() === 'login') {
+          <div class="form-head">
+            <h2 class="form-title">Belépés a fiókodba</h2>
+            <p class="form-subtitle">
+              Add meg a regisztrációkor használt e-mail címedet és jelszavadat.
+            </p>
+          </div>
+
+          @if (authError(); as error) {
+            <div class="error-banner" role="alert">{{ error }}</div>
+          }
+
+          <form class="auth-form" [formGroup]="loginForm" (ngSubmit)="submitLogin()">
+            <div class="field-group">
+              <label class="field-label" for="login-email">E-mail cím</label>
+              <input
+                id="login-email"
+                type="email"
+                class="field-input"
+                [class.is-invalid]="hasFieldError('login', 'email')"
+                formControlName="email"
+                autocomplete="email"
+                placeholder="nev@egyetem.hu"
+                (input)="clearError()"
+              />
+              @if (hasFieldError('login', 'email')) {
+                <span class="field-hint-error">Adj meg egy érvényes e-mail címet.</span>
+              }
+            </div>
+
+            <div class="field-group">
+              <div class="label-row">
+                <label class="field-label" for="login-password">Jelszó</label>
+                <button
+                  type="button"
+                  class="visibility-btn"
+                  (click)="togglePasswordVisibility()"
+                >
+                  {{ showPassword() ? 'Elrejt' : 'Mutat' }}
+                </button>
+              </div>
+              <input
+                id="login-password"
+                [type]="showPassword() ? 'text' : 'password'"
+                class="field-input"
+                [class.is-invalid]="hasFieldError('login', 'password')"
+                formControlName="password"
+                autocomplete="current-password"
+                placeholder="Jelszó megadása"
+                (input)="clearError()"
+              />
+            </div>
+
+            <button type="submit" class="btn btn-primary submit-btn">
+              Bejelentkezés
+            </button>
+          </form>
+
+          <div class="card-divider"></div>
+
+          <div class="card-switch-row">
+            <span class="switch-text">Még nincs fiókod?</span>
+            <a routerLink="/auth/register" class="switch-link">Regisztráció üres lappal</a>
+          </div>
+        } @else {
+          <div class="form-head">
+            <h2 class="form-title">Új fiók létrehozása</h2>
+            <p class="form-subtitle">
+              A fiókod teljesen üres munkaterülettel jön létre, azonnal elkezdheted felvenni a saját tárgyaidat.
+            </p>
+          </div>
+
+          @if (authError(); as error) {
+            <div class="error-banner" role="alert">{{ error }}</div>
+          }
+
+          <form class="auth-form" [formGroup]="registerForm" (ngSubmit)="submitRegister()">
+            <div class="field-group">
+              <label class="field-label" for="reg-name">Teljes név</label>
+              <input
+                id="reg-name"
+                type="text"
+                class="field-input"
+                [class.is-invalid]="hasFieldError('register', 'name')"
+                formControlName="name"
+                autocomplete="name"
+                placeholder="pl. Kiss Márton"
+                (input)="clearError()"
+              />
+              @if (hasFieldError('register', 'name')) {
+                <span class="field-hint-error">Legalább 2 karakter szükséges.</span>
+              }
+            </div>
+
+            <div class="field-row-2">
+              <div class="field-group">
+                <label class="field-label" for="reg-email">E-mail cím</label>
+                <input
+                  id="reg-email"
+                  type="email"
+                  class="field-input"
+                  [class.is-invalid]="hasFieldError('register', 'email')"
+                  formControlName="email"
+                  autocomplete="email"
+                  placeholder="nev@egyetem.hu"
+                  (input)="clearError()"
+                />
+                @if (hasFieldError('register', 'email')) {
+                  <span class="field-hint-error">Érvényes e-mail cím szükséges.</span>
+                }
+              </div>
+
+              <div class="field-group">
+                <label class="field-label" for="reg-semester">Aktív félév</label>
+                <input
+                  id="reg-semester"
+                  type="text"
+                  class="field-input mono"
+                  [class.is-invalid]="hasFieldError('register', 'semester')"
+                  formControlName="semester"
+                  placeholder="2026/27/1"
+                  (input)="clearError()"
+                />
+              </div>
+            </div>
+
+            <div class="field-group">
+              <div class="label-row">
+                <label class="field-label" for="reg-password">Jelszó</label>
+                <button
+                  type="button"
+                  class="visibility-btn"
+                  (click)="togglePasswordVisibility()"
+                >
+                  {{ showPassword() ? 'Elrejt' : 'Mutat' }}
+                </button>
+              </div>
+              <input
+                id="reg-password"
+                [type]="showPassword() ? 'text' : 'password'"
+                class="field-input"
+                [class.is-invalid]="hasFieldError('register', 'password')"
+                formControlName="password"
+                autocomplete="new-password"
+                placeholder="Legalább 6 karakter"
+                (input)="clearError()"
+              />
+              @if (hasFieldError('register', 'password')) {
+                <span class="field-hint-error">A jelszónak legalább 6 karakternek kell lennie.</span>
+              }
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="reg-confirm">Jelszó megerősítése</label>
+              <input
+                id="reg-confirm"
+                [type]="showPassword() ? 'text' : 'password'"
+                class="field-input"
+                [class.is-invalid]="hasFieldError('register', 'confirmPassword')"
+                formControlName="confirmPassword"
+                autocomplete="new-password"
+                placeholder="Írd be újra a jelszót"
+                (input)="clearError()"
+              />
+            </div>
+
+            <button type="submit" class="btn btn-primary submit-btn">
+              Fiók létrehozása és belépés
+            </button>
+          </form>
+
+          <div class="card-divider"></div>
+
+          <div class="card-switch-row">
+            <span class="switch-text">Már van fiókod?</span>
+            <a routerLink="/auth/login" class="switch-link">Bejelentkezés</a>
+          </div>
+        }
+      </div>
+
+      <div class="card-demo-strip">
+        <span class="demo-strip-copy">Előbb csak megnéznéd mintaadatokkal?</span>
+        <button type="button" class="demo-strip-btn" (click)="launchDemo()">
+          Élő demó indítása
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
