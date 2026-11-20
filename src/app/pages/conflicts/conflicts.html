@@ -1,4 +1,436 @@
-<section class="page-placeholder">
-  <h1>Ütközésvizsgálat</h1>
-  <p>Ütközésdiagnosztikai modul előkészítve.</p>
+<header class="page-header">
+  <div class="header-copy">
+    <span class="header-eyebrow mono">
+      Automatikus ütközésvizsgálat · {{ store.activeAssessmentsCount() }} aktív esemény elemzése
+    </span>
+    <h1 class="page-title">Ütközésdiagnosztika és ütemterv</h1>
+  </div>
+
+  <div class="header-actions">
+    <a routerLink="/courses" class="btn btn-secondary">Órarend szerkesztése</a>
+    <a routerLink="/assessments" class="btn btn-primary">Összes számonkérés</a>
+  </div>
+</header>
+
+<section class="summary-strip surface-card" aria-label="Ütközés statisztika">
+  <button
+    type="button"
+    class="summary-cell"
+    [class.is-selected]="categoryFilter() === 'all'"
+    (click)="setCategoryFilter('all')"
+  >
+    <span class="summary-label">Összes észlelés</span>
+    <span class="summary-value mono">{{ store.conflicts().length }}</span>
+  </button>
+
+  <button
+    type="button"
+    class="summary-cell"
+    [class.is-critical]="timeOverlapCount() > 0"
+    [class.is-selected]="categoryFilter() === 'time_overlap'"
+    (click)="setCategoryFilter('time_overlap')"
+  >
+    <span class="summary-label">Időpont-ütközés</span>
+    <span class="summary-value mono">{{ timeOverlapCount() }}</span>
+  </button>
+
+  <button
+    type="button"
+    class="summary-cell"
+    [class.is-warning]="classCollisionCount() > 0"
+    [class.is-selected]="categoryFilter() === 'class_collision'"
+    (click)="setCategoryFilter('class_collision')"
+  >
+    <span class="summary-label">Órarendi átfedés</span>
+    <span class="summary-value mono">{{ classCollisionCount() }}</span>
+  </button>
+
+  <button
+    type="button"
+    class="summary-cell"
+    [class.is-warning]="dailyOverloadCount() > 0"
+    [class.is-selected]="categoryFilter() === 'daily_overload'"
+    (click)="setCategoryFilter('daily_overload')"
+  >
+    <span class="summary-label">Napi terhelési csúcs</span>
+    <span class="summary-value mono">{{ dailyOverloadCount() }}</span>
+  </button>
+</section>
+
+<section class="diagnostics-section" aria-label="Észlelt ütközések">
+  <div class="section-bar">
+    <div>
+      <h2 class="section-title">Aktív ütközések és feloldás</h2>
+      <p class="section-subtitle">
+        A kártyákon belül közvetlenül átütemezheted az érintett ZH-kat vagy lezárhatod a kész feladatokat
+      </p>
+    </div>
+
+    @if (categoryFilter() !== 'all') {
+      <button
+        type="button"
+        class="inline-reset-btn"
+        (click)="setCategoryFilter('all')"
+      >
+        Összes kategória megjelenítése
+      </button>
+    }
+  </div>
+
+  @if (store.conflicts().length === 0) {
+    <div class="surface-card clear-banner">
+      <div class="clear-banner-copy">
+        <span class="badge badge-success">Ütközésmentes félév</span>
+        <h3 class="clear-title">Jelenleg nincs aktív időpont-ütközés vagy terhelési csúcs</h3>
+        <p class="clear-desc">
+          A rendszer minden nyitott ZH-t, vizsgát, beadandót és heti tanórát ellenőrzött. Új esemény rögzítésekor a vizsgálat automatikusan lefut.
+        </p>
+      </div>
+    </div>
+  } @else if (filteredConflicts().length === 0) {
+    <div class="surface-card empty-filter-state">
+      <p class="empty-title">Ebben a kategóriában nincs észlelés</p>
+      <p class="empty-copy">
+        Válassz másik kategóriát a fenti sávból, vagy nézd meg az összes aktív figyelmeztetést.
+      </p>
+    </div>
+  } @else {
+    <div class="conflict-cards">
+      @for (conflict of filteredConflicts(); track conflict.id) {
+        <article
+          class="surface-card conflict-card"
+          [class.is-critical]="conflict.severity === 'critical'"
+          [class.is-warning]="conflict.severity === 'warning'"
+        >
+          <div class="conflict-card-head">
+            <div class="conflict-badges">
+              <span
+                class="badge"
+                [class.badge-critical]="conflict.severity === 'critical'"
+                [class.badge-warning]="conflict.severity === 'warning'"
+              >
+                {{ conflict.severity === 'critical' ? 'Kritikus' : 'Figyelmeztetés' }}
+              </span>
+              <span class="badge badge-neutral">
+                {{ formatCategory(conflict.category) }}
+              </span>
+            </div>
+
+            <span class="conflict-date mono">
+              {{ formatDateLabel(conflict.date) }} · {{ formatDayName(conflict.date) }}
+            </span>
+          </div>
+
+          <h3 class="conflict-title">{{ conflict.title }}</h3>
+          <p class="conflict-desc">{{ conflict.description }}</p>
+
+          <div class="involved-list">
+            <span class="involved-label">Érintett számonkérések</span>
+
+            @for (item of getInvolvedAssessments(conflict); track item.id) {
+              @let rowKey = conflict.id + ':' + item.id;
+              <div class="involved-item-wrap">
+                <div class="involved-row">
+                  <span
+                    class="course-dot"
+                    [style.background-color]="getCourseColor(item.courseId)"
+                  ></span>
+
+                  <div class="involved-copy">
+                    <div class="involved-top">
+                      <span class="involved-code mono">
+                        {{ getCourse(item.courseId)?.code ?? 'ISMERETLEN' }}
+                      </span>
+                      <span class="involved-title">{{ item.title }}</span>
+                    </div>
+                    <div class="involved-meta mono">
+                      <span>{{ formatDateLabel(item.date) }}</span>
+                      @if (item.startTime && item.endTime) {
+                        <span class="dot-sep"></span>
+                        <span>{{ item.startTime }}–{{ item.endTime }}</span>
+                      } @else {
+                        <span class="dot-sep"></span>
+                        <span>Egész napos</span>
+                      }
+                      <span class="dot-sep"></span>
+                      <span>{{ item.weightPercent }}%</span>
+                      <span class="dot-sep"></span>
+                      <span>{{ statusLabels[item.status] }}</span>
+                    </div>
+                  </div>
+
+                  <div class="involved-actions">
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      (click)="openReschedule(rowKey, item)"
+                    >
+                      @if (reschedulingKey() === rowKey) {
+                        Bezárás
+                      } @else {
+                        Átütemezés
+                      }
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      (click)="markSubmitted(item.id)"
+                    >
+                      Leadva
+                    </button>
+                  </div>
+                </div>
+
+                @if (reschedulingKey() === rowKey) {
+                  <form
+                    class="reschedule-bar"
+                    [formGroup]="rescheduleForm"
+                    (ngSubmit)="submitReschedule()"
+                  >
+                    <div class="reschedule-fields">
+                      <div>
+                        <label class="field-label">Új dátum</label>
+                        <input
+                          type="date"
+                          class="field-input mono"
+                          formControlName="date"
+                        />
+                      </div>
+                      <div>
+                        <label class="field-label">Kezdés</label>
+                        <input
+                          type="time"
+                          class="field-input mono"
+                          formControlName="startTime"
+                        />
+                      </div>
+                      <div>
+                        <label class="field-label">Befejezés</label>
+                        <input
+                          type="time"
+                          class="field-input mono"
+                          formControlName="endTime"
+                        />
+                      </div>
+                    </div>
+
+                    @if (rescheduleError()) {
+                      <p class="reschedule-error">{{ rescheduleError() }}</p>
+                    }
+
+                    <div class="reschedule-footer">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                        (click)="closeReschedule()"
+                      >
+                        Mégse
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">
+                        Új időpont mentése
+                      </button>
+                    </div>
+                  </form>
+                }
+              </div>
+            }
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>
+
+<section class="timeline-section" aria-label="Kronológiai ütemterv">
+  <div class="section-bar">
+    <div>
+      <h2 class="section-title">Kronológiai ütemterv</h2>
+      <p class="section-subtitle">
+        Nyitott számonkérések naponként csoportosítva, az adott hétköznap rendszeres óráival összevetve
+      </p>
+    </div>
+    <span class="section-meta mono">{{ timelineDays().length }} érintett nap</span>
+  </div>
+
+  @if (timelineDays().length === 0) {
+    <div class="surface-card empty-filter-state">
+      <p class="empty-title">Nincs közelgő aktív esemény</p>
+      <p class="empty-copy">
+        Vegye fel az első ZH-t vagy beadandót, és itt megjelenik a teljes idővonal az órarendi kontextussal együtt.
+      </p>
+    </div>
+  } @else {
+    <div class="timeline-list">
+      @for (day of timelineDays(); track day.date) {
+        <article
+          class="surface-card timeline-day"
+          [class.is-critical]="day.highestSeverity === 'critical'"
+          [class.is-warning]="day.highestSeverity === 'warning'"
+        >
+          <div class="timeline-day-head">
+            <div class="timeline-date-block">
+              <span class="timeline-date mono">{{ day.formattedDate }}</span>
+              <span class="timeline-dow">{{ day.dayName }}</span>
+              <span class="timeline-rel mono">{{ day.relativeLabel }}</span>
+            </div>
+
+            <div class="timeline-day-metrics">
+              <span class="badge badge-neutral mono">
+                {{ day.assessments.length }} feladat · {{ day.totalWeight }}%
+              </span>
+              @if (day.highestSeverity === 'critical') {
+                <span class="badge badge-critical">
+                  {{ day.conflicts.length }} ütközés
+                </span>
+              } @else if (day.highestSeverity === 'warning') {
+                <span class="badge badge-warning">
+                  {{ day.conflicts.length }} figyelmeztetés
+                </span>
+              }
+            </div>
+          </div>
+
+          <div class="timeline-day-body">
+            <div class="timeline-col">
+              <span class="col-heading">Számonkérések és határidők</span>
+
+              <div class="timeline-items">
+                @for (item of day.assessments; track item.id) {
+                  @let timelineKey = 'tl:' + item.id;
+                  <div class="timeline-item-wrap">
+                    <div
+                      class="timeline-item"
+                      [class.has-critical]="hasCriticalOnAssessment(item.id)"
+                      [class.has-warning]="!hasCriticalOnAssessment(item.id) && hasConflictOnAssessment(item.id)"
+                    >
+                      <span
+                        class="course-stripe"
+                        [style.background-color]="getCourseColor(item.courseId)"
+                      ></span>
+
+                      <div class="timeline-item-copy">
+                        <div class="timeline-item-meta">
+                          <span class="involved-code mono">
+                            {{ getCourse(item.courseId)?.code ?? 'ISMERETLEN' }}
+                          </span>
+                          <span class="badge badge-neutral">{{ typeLabels[item.type] }}</span>
+                          <span class="mono timeline-weight">{{ item.weightPercent }}%</span>
+                        </div>
+
+                        <p class="timeline-item-title">{{ item.title }}</p>
+
+                        <div class="involved-meta mono">
+                          @if (item.startTime && item.endTime) {
+                            <span>{{ item.startTime }}–{{ item.endTime }}</span>
+                          } @else {
+                            <span>Egész napos határidő</span>
+                          }
+                          @if (item.location) {
+                            <span class="dot-sep"></span>
+                            <span>{{ item.location }}</span>
+                          }
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                        (click)="openReschedule(timelineKey, item)"
+                      >
+                        @if (reschedulingKey() === timelineKey) {
+                          Bezárás
+                        } @else {
+                          Átütemezés
+                        }
+                      </button>
+                    </div>
+
+                    @if (reschedulingKey() === timelineKey) {
+                      <form
+                        class="reschedule-bar"
+                        [formGroup]="rescheduleForm"
+                        (ngSubmit)="submitReschedule()"
+                      >
+                        <div class="reschedule-fields">
+                          <div>
+                            <label class="field-label">Új dátum</label>
+                            <input
+                              type="date"
+                              class="field-input mono"
+                              formControlName="date"
+                            />
+                          </div>
+                          <div>
+                            <label class="field-label">Kezdés</label>
+                            <input
+                              type="time"
+                              class="field-input mono"
+                              formControlName="startTime"
+                            />
+                          </div>
+                          <div>
+                            <label class="field-label">Befejezés</label>
+                            <input
+                              type="time"
+                              class="field-input mono"
+                              formControlName="endTime"
+                            />
+                          </div>
+                        </div>
+
+                        @if (rescheduleError()) {
+                          <p class="reschedule-error">{{ rescheduleError() }}</p>
+                        }
+
+                        <div class="reschedule-footer">
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-sm"
+                            (click)="closeReschedule()"
+                          >
+                            Mégse
+                          </button>
+                          <button type="submit" class="btn btn-primary btn-sm">
+                            Mentés
+                          </button>
+                        </div>
+                      </form>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="timeline-col timeline-col-slots">
+              <span class="col-heading">{{ day.dayName }}i órarendi sávok</span>
+
+              @if (day.classSlots.length === 0) {
+                <p class="slots-none">Ezen a napon nincs rendszeres tanórád.</p>
+              } @else {
+                <div class="day-slots-list">
+                  @for (entry of day.classSlots; track entry.slot.id) {
+                    <div
+                      class="day-slot-chip"
+                      [style.border-left-color]="entry.color"
+                    >
+                      <span class="day-slot-time mono">
+                        {{ entry.slot.startTime }}–{{ entry.slot.endTime }}
+                      </span>
+                      <span class="day-slot-course">
+                        <strong class="mono">{{ entry.course.code }}</strong>
+                        {{ entry.course.name }}
+                      </span>
+                      <span class="day-slot-room mono">
+                        {{ slotTypeLabels[entry.slot.type] }} · {{ entry.slot.room }}
+                      </span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
 </section>
