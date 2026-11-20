@@ -6,10 +6,6 @@ export interface UserAccount {
   createdAt: string;
 }
 
-export interface StoredAccountRecord extends UserAccount {
-  password: string;
-}
-
 export type SessionMode = 'guest' | 'demo' | 'authenticated';
 
 export interface AuthSession {

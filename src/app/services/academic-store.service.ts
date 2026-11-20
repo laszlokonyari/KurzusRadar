@@ -1,4 +1,6 @@
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { createSeedData } from '../data/seed-data';
 import {
   Assessment,
@@ -10,17 +12,27 @@ import {
 import { AuthService } from './auth.service';
 import { detectAcademicConflicts } from './conflict-engine';
 
+interface WorkspaceResponse {
+  courses: Course[];
+  assessments: Assessment[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class AcademicStoreService {
   private readonly auth = inject(AuthService);
+  private readonly http = inject(HttpClient);
   private readonly coursesSignal = signal<Course[]>([]);
   private readonly assessmentsSignal = signal<Assessment[]>([]);
+  private readonly loadingSignal = signal(false);
+  private readonly syncErrorSignal = signal<string | null>(null);
   private activeScope: string | null = null;
 
   readonly courses = this.coursesSignal.asReadonly();
   readonly assessments = this.assessmentsSignal.asReadonly();
+  readonly loading = this.loadingSignal.asReadonly();
+  readonly syncError = this.syncErrorSignal.asReadonly();
 
   readonly courseMap = computed(() => {
     const map = new Map<string, Course>();
@@ -80,93 +92,275 @@ export class AcademicStoreService {
   );
 
   constructor() {
-    this.hydrateForScope(this.auth.workspaceScope());
+    void this.hydrateForScope(this.auth.workspaceScope());
     this.auth.scopeChanges$.subscribe((scope) => {
-      this.hydrateForScope(scope);
+      void this.hydrateForScope(scope);
     });
   }
 
-  addCourse(input: Omit<Course, 'id'>): Course {
-    const created: Course = {
-      ...input,
-      id: this.generateId('course'),
-    };
-    this.coursesSignal.update((list) => [...list, created]);
-    this.persistCurrentScope();
-    return created;
+  dismissSyncError(): void {
+    this.syncErrorSignal.set(null);
+  }
+
+  addCourse(input: Omit<Course, 'id'>): void {
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      const created: Course = {
+        ...input,
+        id: this.generateId('course'),
+      };
+      this.coursesSignal.update((list) => [...list, created]);
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      const response = await firstValueFrom(
+        this.http.post<{ course: Course }>('/api/courses', input, {
+          withCredentials: true,
+        })
+      );
+      this.coursesSignal.update((list) => [...list, response.course]);
+    });
   }
 
   updateCourse(courseId: string, patch: Partial<Omit<Course, 'id'>>): void {
-    this.coursesSignal.update((list) =>
-      list.map((course) =>
-        course.id === courseId ? { ...course, ...patch } : course
-      )
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId ? { ...course, ...patch } : course
+        )
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      const response = await firstValueFrom(
+        this.http.patch<{ course: Course }>(`/api/courses/${courseId}`, patch, {
+          withCredentials: true,
+        })
+      );
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId ? response.course : course
+        )
+      );
+    });
   }
 
   deleteCourse(courseId: string): void {
-    this.coursesSignal.update((list) =>
-      list.filter((course) => course.id !== courseId)
-    );
-    this.assessmentsSignal.update((list) =>
-      list.filter((item) => item.courseId !== courseId)
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.coursesSignal.update((list) =>
+        list.filter((course) => course.id !== courseId)
+      );
+      this.assessmentsSignal.update((list) =>
+        list.filter((item) => item.courseId !== courseId)
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      await firstValueFrom(
+        this.http.delete(`/api/courses/${courseId}`, {
+          withCredentials: true,
+        })
+      );
+      this.coursesSignal.update((list) =>
+        list.filter((course) => course.id !== courseId)
+      );
+      this.assessmentsSignal.update((list) =>
+        list.filter((item) => item.courseId !== courseId)
+      );
+    });
   }
 
   addSlotToCourse(
     courseId: string,
     slot: Omit<CourseScheduleSlot, 'id'>
   ): void {
-    const createdSlot: CourseScheduleSlot = {
-      ...slot,
-      id: this.generateId('slot'),
-    };
-    this.coursesSignal.update((list) =>
-      list.map((course) =>
-        course.id === courseId
-          ? { ...course, slots: [...course.slots, createdSlot] }
-          : course
-      )
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      const createdSlot: CourseScheduleSlot = {
+        ...slot,
+        id: this.generateId('slot'),
+      };
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId
+            ? { ...course, slots: [...course.slots, createdSlot] }
+            : course
+        )
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      const response = await firstValueFrom(
+        this.http.post<{ slot: CourseScheduleSlot }>(
+          `/api/courses/${courseId}/slots`,
+          slot,
+          { withCredentials: true }
+        )
+      );
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId
+            ? { ...course, slots: [...course.slots, response.slot] }
+            : course
+        )
+      );
+    });
   }
 
   removeSlotFromCourse(courseId: string, slotId: string): void {
-    this.coursesSignal.update((list) =>
-      list.map((course) =>
-        course.id === courseId
-          ? {
-            ...course,
-            slots: course.slots.filter((slot) => slot.id !== slotId),
-          }
-          : course
-      )
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId
+            ? {
+              ...course,
+              slots: course.slots.filter((slot) => slot.id !== slotId),
+            }
+            : course
+        )
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      await firstValueFrom(
+        this.http.delete(`/api/courses/${courseId}/slots/${slotId}`, {
+          withCredentials: true,
+        })
+      );
+      this.coursesSignal.update((list) =>
+        list.map((course) =>
+          course.id === courseId
+            ? {
+              ...course,
+              slots: course.slots.filter((slot) => slot.id !== slotId),
+            }
+            : course
+        )
+      );
+    });
   }
 
-  addAssessment(input: Omit<Assessment, 'id'>): Assessment {
-    const created: Assessment = {
+  addAssessment(input: Omit<Assessment, 'id'>): void {
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      const created: Assessment = {
+        ...input,
+        id: this.generateId('assess'),
+      };
+      this.assessmentsSignal.update((list) => [...list, created]);
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    const body = {
       ...input,
-      id: this.generateId('assess'),
+      startTime: input.startTime ?? null,
+      endTime: input.endTime ?? null,
+      location: input.location ?? null,
+      notes: input.notes ?? null,
     };
-    this.assessmentsSignal.update((list) => [...list, created]);
-    this.persistCurrentScope();
-    return created;
+
+    void this.runRemoteMutation(async () => {
+      const response = await firstValueFrom(
+        this.http.post<{ assessment: Assessment }>('/api/assessments', body, {
+          withCredentials: true,
+        })
+      );
+      this.assessmentsSignal.update((list) => [...list, response.assessment]);
+    });
   }
 
   updateAssessment(
     assessmentId: string,
     patch: Partial<Omit<Assessment, 'id'>>
   ): void {
-    this.assessmentsSignal.update((list) =>
-      list.map((item) =>
-        item.id === assessmentId ? { ...item, ...patch } : item
-      )
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.assessmentsSignal.update((list) =>
+        list.map((item) =>
+          item.id === assessmentId ? { ...item, ...patch } : item
+        )
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    const body: Record<string, unknown> = { ...patch };
+    if ('startTime' in patch) {
+      body['startTime'] = patch.startTime ?? null;
+    }
+    if ('endTime' in patch) {
+      body['endTime'] = patch.endTime ?? null;
+    }
+    if ('location' in patch) {
+      body['location'] = patch.location ?? null;
+    }
+    if ('notes' in patch) {
+      body['notes'] = patch.notes ?? null;
+    }
+
+    void this.runRemoteMutation(async () => {
+      const response = await firstValueFrom(
+        this.http.patch<{ assessment: Assessment }>(
+          `/api/assessments/${assessmentId}`,
+          body,
+          { withCredentials: true }
+        )
+      );
+      this.assessmentsSignal.update((list) =>
+        list.map((item) =>
+          item.id === assessmentId ? response.assessment : item
+        )
+      );
+    });
   }
 
   updateAssessmentStatus(
@@ -177,61 +371,136 @@ export class AcademicStoreService {
   }
 
   deleteAssessment(assessmentId: string): void {
-    this.assessmentsSignal.update((list) =>
-      list.filter((item) => item.id !== assessmentId)
-    );
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.assessmentsSignal.update((list) =>
+        list.filter((item) => item.id !== assessmentId)
+      );
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      await firstValueFrom(
+        this.http.delete(`/api/assessments/${assessmentId}`, {
+          withCredentials: true,
+        })
+      );
+      this.assessmentsSignal.update((list) =>
+        list.filter((item) => item.id !== assessmentId)
+      );
+    });
   }
 
   resetToDemoData(): void {
+    if (!this.isDemoScope()) {
+      return;
+    }
     const seed = createSeedData();
     this.coursesSignal.set(seed.courses);
     this.assessmentsSignal.set(seed.assessments);
-    this.persistCurrentScope();
+    this.persistDemoScope();
   }
 
   clearAllData(): void {
-    this.coursesSignal.set([]);
-    this.assessmentsSignal.set([]);
-    this.persistCurrentScope();
+    this.syncErrorSignal.set(null);
+
+    if (this.isDemoScope()) {
+      this.coursesSignal.set([]);
+      this.assessmentsSignal.set([]);
+      this.persistDemoScope();
+      return;
+    }
+
+    if (!this.isAuthenticatedScope()) {
+      return;
+    }
+
+    void this.runRemoteMutation(async () => {
+      await firstValueFrom(
+        this.http.delete('/api/workspace', { withCredentials: true })
+      );
+      this.coursesSignal.set([]);
+      this.assessmentsSignal.set([]);
+    });
   }
 
-  private hydrateForScope(scope: string | null): void {
+  private async hydrateForScope(scope: string | null): Promise<void> {
     this.activeScope = scope;
+    this.syncErrorSignal.set(null);
 
     if (!scope) {
       this.coursesSignal.set([]);
       this.assessmentsSignal.set([]);
+      this.loadingSignal.set(false);
       return;
     }
 
-    if (typeof localStorage === 'undefined') {
-      if (scope === 'demo') {
-        const seed = createSeedData();
-        this.coursesSignal.set(seed.courses);
-        this.assessmentsSignal.set(seed.assessments);
-      } else {
+    if (scope === 'demo') {
+      this.hydrateDemoScope();
+      this.loadingSignal.set(false);
+      return;
+    }
+
+    this.loadingSignal.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.http.get<WorkspaceResponse>('/api/workspace', {
+          withCredentials: true,
+        })
+      );
+      if (this.activeScope === scope) {
+        this.coursesSignal.set(response.courses);
+        this.assessmentsSignal.set(response.assessments);
+      }
+    } catch (err) {
+      if (this.activeScope === scope) {
         this.coursesSignal.set([]);
         this.assessmentsSignal.set([]);
+        this.syncErrorSignal.set(
+          this.extractErrorMessage(err, 'Nem sikerült betölteni a munkaterületet.')
+        );
       }
+    } finally {
+      if (this.activeScope === scope) {
+        this.loadingSignal.set(false);
+      }
+    }
+  }
+
+  private async runRemoteMutation(action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (err) {
+      this.syncErrorSignal.set(
+        this.extractErrorMessage(err, 'A módosítás mentése sikertelen.')
+      );
+    }
+  }
+
+  private hydrateDemoScope(): void {
+    if (typeof localStorage === 'undefined') {
+      const seed = createSeedData();
+      this.coursesSignal.set(seed.courses);
+      this.assessmentsSignal.set(seed.assessments);
       return;
     }
 
-    const coursesKey = this.storageKey(scope, 'courses');
-    const assessmentsKey = this.storageKey(scope, 'assessments');
-    const rawCourses = localStorage.getItem(coursesKey);
-    const rawAssessments = localStorage.getItem(assessmentsKey);
+    const rawCourses = localStorage.getItem(this.demoStorageKey('courses'));
+    const rawAssessments = localStorage.getItem(
+      this.demoStorageKey('assessments')
+    );
 
     if (rawCourses === null && rawAssessments === null) {
-      if (scope === 'demo') {
-        const seed = createSeedData();
-        this.coursesSignal.set(seed.courses);
-        this.assessmentsSignal.set(seed.assessments);
-        this.persistCurrentScope();
-      } else {
-        this.coursesSignal.set([]);
-        this.assessmentsSignal.set([]);
-      }
+      const seed = createSeedData();
+      this.coursesSignal.set(seed.courses);
+      this.assessmentsSignal.set(seed.assessments);
+      this.persistDemoScope();
       return;
     }
 
@@ -245,22 +514,23 @@ export class AcademicStoreService {
         Array.isArray(parsedAssessments) ? parsedAssessments : []
       );
     } catch {
-      this.coursesSignal.set([]);
-      this.assessmentsSignal.set([]);
+      const seed = createSeedData();
+      this.coursesSignal.set(seed.courses);
+      this.assessmentsSignal.set(seed.assessments);
     }
   }
 
-  private persistCurrentScope(): void {
-    if (!this.activeScope || typeof localStorage === 'undefined') {
+  private persistDemoScope(): void {
+    if (typeof localStorage === 'undefined') {
       return;
     }
     try {
       localStorage.setItem(
-        this.storageKey(this.activeScope, 'courses'),
+        this.demoStorageKey('courses'),
         JSON.stringify(this.coursesSignal())
       );
       localStorage.setItem(
-        this.storageKey(this.activeScope, 'assessments'),
+        this.demoStorageKey('assessments'),
         JSON.stringify(this.assessmentsSignal())
       );
     } catch {
@@ -268,8 +538,29 @@ export class AcademicStoreService {
     }
   }
 
-  private storageKey(scope: string, entity: 'courses' | 'assessments'): string {
-    return `kurzusradar_${scope}_${entity}_v1`;
+  private demoStorageKey(entity: 'courses' | 'assessments'): string {
+    return `kurzusradar_demo_${entity}_v1`;
+  }
+
+  private isDemoScope(): boolean {
+    return this.activeScope === 'demo';
+  }
+
+  private isAuthenticatedScope(): boolean {
+    return this.activeScope !== null && this.activeScope.startsWith('user_');
+  }
+
+  private extractErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 0) {
+        return 'Megszakadt a kapcsolat a szerverrel.';
+      }
+      const apiError = err.error?.error;
+      if (typeof apiError === 'string' && apiError.length > 0) {
+        return apiError;
+      }
+    }
+    return fallback;
   }
 
   private generateId(prefix: string): string {

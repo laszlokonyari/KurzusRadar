@@ -1,22 +1,27 @@
-import { Injectable, computed, signal } from '@angular/core';
-import { Subject } from 'rxjs';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Subject, firstValueFrom } from 'rxjs';
 import {
   AuthActionResult,
   AuthSession,
   RegisterPayload,
-  StoredAccountRecord,
   UserAccount,
 } from '../models/auth.models';
 
-const ACCOUNTS_STORAGE_KEY = 'kurzusradar_accounts_v1';
-const SESSION_STORAGE_KEY = 'kurzusradar_session_v1';
+const DEMO_MODE_STORAGE_KEY = 'kurzusradar_demo_active_v1';
+
+interface AuthResponse {
+  user: UserAccount;
+}
 
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
-  private readonly sessionSignal = signal<AuthSession>(this.readInitialSession());
+  private readonly http = inject(HttpClient);
+  private readonly sessionSignal = signal<AuthSession>(this.readInitialState());
   private readonly scopeChangesSubject = new Subject<string | null>();
+  private initPromise: Promise<void> | null = null;
 
   readonly session = this.sessionSignal.asReadonly();
   readonly scopeChanges$ = this.scopeChangesSubject.asObservable();
@@ -42,174 +47,156 @@ export class AuthService {
     return null;
   });
 
+  constructor() {
+    void this.ensureInitialized();
+  }
+
+  ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.restoreSessionFromApi();
+    }
+    return this.initPromise;
+  }
+
   enterDemoMode(): void {
+    this.writeDemoFlag(true);
     this.setSession({
       mode: 'demo',
       user: null,
     });
   }
 
-  register(payload: RegisterPayload): AuthActionResult {
-    const name = payload.name.trim();
-    const email = payload.email.trim().toLowerCase();
-    const password = payload.password;
-    const semester = payload.semester.trim() || '2026/27/1';
+  async register(payload: RegisterPayload): Promise<AuthActionResult> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<AuthResponse>('/api/auth/register', payload, {
+          withCredentials: true,
+        })
+      );
 
-    if (name.length < 2) {
-      return { ok: false, error: 'Add meg a neved (legalább 2 karakter).' };
-    }
-    if (!email.includes('@') || email.length < 5) {
-      return { ok: false, error: 'Adj meg egy érvényes e-mail címet.' };
-    }
-    if (password.length < 6) {
+      this.writeDemoFlag(false);
+      this.setSession({
+        mode: 'authenticated',
+        user: response.user,
+      });
+
+      return { ok: true };
+    } catch (err) {
       return {
         ok: false,
-        error: 'A jelszónak legalább 6 karakter hosszúnak kell lennie.',
+        error: this.extractErrorMessage(err, 'A regisztráció nem sikerült.'),
       };
     }
-
-    const accounts = this.readAccounts();
-    if (accounts.some((account) => account.email === email)) {
-      return {
-        ok: false,
-        error: 'Ezzel az e-mail címmel már létezik regisztrált fiók.',
-      };
-    }
-
-    const created: StoredAccountRecord = {
-      id: this.generateUserId(),
-      name,
-      email,
-      semester,
-      password,
-      createdAt: new Date().toISOString(),
-    };
-
-    this.writeAccounts([...accounts, created]);
-    this.setSession({
-      mode: 'authenticated',
-      user: this.toPublicUser(created),
-    });
-
-    return { ok: true };
   }
 
-  login(emailInput: string, password: string): AuthActionResult {
-    const email = emailInput.trim().toLowerCase();
-    const accounts = this.readAccounts();
-    const matched = accounts.find(
-      (account) => account.email === email && account.password === password
-    );
+  async login(email: string, password: string): Promise<AuthActionResult> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<AuthResponse>(
+          '/api/auth/login',
+          { email, password },
+          { withCredentials: true }
+        )
+      );
 
-    if (!matched) {
+      this.writeDemoFlag(false);
+      this.setSession({
+        mode: 'authenticated',
+        user: response.user,
+      });
+
+      return { ok: true };
+    } catch (err) {
       return {
         ok: false,
-        error: 'Hibás e-mail cím vagy jelszó.',
+        error: this.extractErrorMessage(err, 'Sikertelen bejelentkezés.'),
       };
     }
-
-    this.setSession({
-      mode: 'authenticated',
-      user: this.toPublicUser(matched),
-    });
-
-    return { ok: true };
   }
 
-  logout(): void {
+  async logout(): Promise<void> {
+    const wasAuthenticated = this.isAuthenticated();
+    this.writeDemoFlag(false);
     this.setSession({
       mode: 'guest',
       user: null,
     });
+
+    if (wasAuthenticated) {
+      try {
+        await firstValueFrom(
+          this.http.post('/api/auth/logout', {}, { withCredentials: true })
+        );
+      } catch {
+        return;
+      }
+    }
+  }
+
+  private async restoreSessionFromApi(): Promise<void> {
+    if (this.sessionSignal().mode === 'demo') {
+      return;
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get<AuthResponse>('/api/auth/me', {
+          withCredentials: true,
+        })
+      );
+
+      if (this.sessionSignal().mode !== 'demo') {
+        this.setSession({
+          mode: 'authenticated',
+          user: response.user,
+        });
+      }
+    } catch {
+      if (this.sessionSignal().mode !== 'demo') {
+        this.sessionSignal.set({ mode: 'guest', user: null });
+      }
+    }
   }
 
   private setSession(next: AuthSession): void {
     this.sessionSignal.set(next);
-    this.persistSession(next);
     this.scopeChangesSubject.next(this.workspaceScope());
   }
 
-  private toPublicUser(record: StoredAccountRecord): UserAccount {
-    return {
-      id: record.id,
-      name: record.name,
-      email: record.email,
-      semester: record.semester,
-      createdAt: record.createdAt,
-    };
-  }
-
-  private readInitialSession(): AuthSession {
-    if (typeof localStorage === 'undefined') {
-      return { mode: 'guest', user: null };
-    }
-
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) {
-      return { mode: 'guest', user: null };
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as AuthSession;
-      if (parsed.mode === 'demo') {
+  private readInitialState(): AuthSession {
+    if (typeof localStorage !== 'undefined') {
+      if (localStorage.getItem(DEMO_MODE_STORAGE_KEY) === 'true') {
         return { mode: 'demo', user: null };
       }
-      if (parsed.mode === 'authenticated' && parsed.user?.id) {
-        return parsed;
-      }
-    } catch {
-      return { mode: 'guest', user: null };
     }
-
     return { mode: 'guest', user: null };
   }
 
-  private persistSession(session: AuthSession): void {
+  private writeDemoFlag(active: boolean): void {
     if (typeof localStorage === 'undefined') {
       return;
     }
     try {
-      if (session.mode === 'guest') {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
+      if (active) {
+        localStorage.setItem(DEMO_MODE_STORAGE_KEY, 'true');
       } else {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+        localStorage.removeItem(DEMO_MODE_STORAGE_KEY);
       }
     } catch {
       return;
     }
   }
 
-  private readAccounts(): StoredAccountRecord[] {
-    if (typeof localStorage === 'undefined') {
-      return [];
+  private extractErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 0) {
+        return 'A szerver jelenleg nem elérhető. Próbáld újra egy pillanat múlva.';
+      }
+      const apiError = err.error?.error;
+      if (typeof apiError === 'string' && apiError.length > 0) {
+        return apiError;
+      }
     }
-    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private writeAccounts(accounts: StoredAccountRecord[]): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-    } catch {
-      return;
-    }
-  }
-
-  private generateUserId(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return `usr_${crypto.randomUUID().slice(0, 8)}`;
-    }
-    return `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    return fallback;
   }
 }

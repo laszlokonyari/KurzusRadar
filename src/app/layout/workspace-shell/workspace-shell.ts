@@ -68,13 +68,13 @@ export class WorkspaceShell {
     this.showFeedback('Demó adatok visszaállítva');
   }
 
-  protected handleExitSession(): void {
+  protected async handleExitSession(): Promise<void> {
     this.auth.logout();
     this.closeMobileMenu();
     this.router.navigateByUrl('/');
   }
 
-  protected goToRegisterFromDemo(): void {
+  protected async goToRegisterFromDemo(): Promise<void> {
     this.auth.logout();
     this.closeMobileMenu();
     this.router.navigateByUrl('/auth/register');

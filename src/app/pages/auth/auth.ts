@@ -26,6 +26,7 @@ export class AuthPage {
   );
 
   protected readonly authError = signal<string | null>(null);
+  protected readonly submitting = signal(false);
   protected readonly showPassword = signal(false);
 
   protected readonly loginForm = this.fb.group({
@@ -34,7 +35,10 @@ export class AuthPage {
   });
 
   protected readonly registerForm = this.fb.group({
-    name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(60)]],
+    name: [
+      '',
+      [Validators.required, Validators.minLength(2), Validators.maxLength(60)],
+    ],
     email: ['', [Validators.required, Validators.email]],
     semester: ['2026/27/1', [Validators.required, Validators.maxLength(20)]],
     password: ['', [Validators.required, Validators.minLength(6)]],
@@ -51,7 +55,11 @@ export class AuthPage {
     }
   }
 
-  protected submitLogin(): void {
+  protected async submitLogin(): Promise<void> {
+    if (this.submitting()) {
+      return;
+    }
+
     this.authError.set(null);
 
     if (this.loginForm.invalid) {
@@ -60,18 +68,27 @@ export class AuthPage {
       return;
     }
 
-    const { email, password } = this.loginForm.getRawValue();
-    const result = this.auth.login(email, password);
+    this.submitting.set(true);
+    try {
+      const { email, password } = this.loginForm.getRawValue();
+      const result = await this.auth.login(email, password);
 
-    if (!result.ok) {
-      this.authError.set(result.error ?? 'Sikertelen bejelentkezés.');
+      if (!result.ok) {
+        this.authError.set(result.error ?? 'Sikertelen bejelentkezés.');
+        return;
+      }
+
+      await this.router.navigateByUrl('/app/dashboard');
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  protected async submitRegister(): Promise<void> {
+    if (this.submitting()) {
       return;
     }
 
-    this.router.navigateByUrl('/app/dashboard');
-  }
-
-  protected submitRegister(): void {
     this.authError.set(null);
 
     if (this.registerForm.invalid) {
@@ -86,24 +103,29 @@ export class AuthPage {
       return;
     }
 
-    const result = this.auth.register({
-      name: raw.name,
-      email: raw.email,
-      password: raw.password,
-      semester: raw.semester,
-    });
+    this.submitting.set(true);
+    try {
+      const result = await this.auth.register({
+        name: raw.name,
+        email: raw.email,
+        password: raw.password,
+        semester: raw.semester,
+      });
 
-    if (!result.ok) {
-      this.authError.set(result.error ?? 'A regisztráció nem sikerült.');
-      return;
+      if (!result.ok) {
+        this.authError.set(result.error ?? 'A regisztráció nem sikerült.');
+        return;
+      }
+
+      await this.router.navigateByUrl('/app/dashboard');
+    } finally {
+      this.submitting.set(false);
     }
-
-    this.router.navigateByUrl('/app/dashboard');
   }
 
   protected launchDemo(): void {
     this.auth.enterDemoMode();
-    this.router.navigateByUrl('/app/dashboard');
+    void this.router.navigateByUrl('/app/dashboard');
   }
 
   protected hasFieldError(

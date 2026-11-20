@@ -227,6 +227,20 @@
         </div>
       </div>
     }
+    @if (store.syncError(); as error) {
+      <div class="sync-error-banner" role="alert">
+        <div class="demo-banner-inner">
+          <span>{{ error }}</span>
+          <button
+            type="button"
+            class="sync-dismiss-btn"
+            (click)="store.dismissSyncError()"
+          >
+            Bezárás
+          </button>
+        </div>
+      </div>
+    }
 
     <div class="stage-container">
       <router-outlet />

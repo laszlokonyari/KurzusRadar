@@ -52,7 +52,7 @@
 
     <div class="aside-footer">
       <p class="storage-note">
-        Helyi előnézeti hitelesítés: a fiókadatok ebben a verzióban a böngésződ <span class="mono">localStorage</span> tárában maradnak, a későbbi backend API közvetlenül az <span class="mono">AuthService</span> rétegbe köthető be.
+        Biztonságos szerveroldali fiókkezelés: a jelszavak bcrypt-tel hashelve, a munkamenetek <span class="mono">HttpOnly</span> sütiben, a féléves adatok pedig PostgreSQL adatbázisban tárolódnak.
       </p>
 
       <button type="button" class="aside-demo-btn" (click)="launchDemo()">
@@ -145,9 +145,16 @@
                 (input)="clearError()"
               />
             </div>
-
-            <button type="submit" class="btn btn-primary submit-btn">
-              Bejelentkezés
+            <button
+              type="submit"
+              class="btn btn-primary submit-btn"
+              [disabled]="submitting()"
+            >
+              @if (submitting()) {
+                Bejelentkezés...
+              } @else {
+                Bejelentkezés
+              }
             </button>
           </form>
 
@@ -259,8 +266,16 @@
               />
             </div>
 
-            <button type="submit" class="btn btn-primary submit-btn">
-              Fiók létrehozása és belépés
+            <button
+              type="submit"
+              class="btn btn-primary submit-btn"
+              [disabled]="submitting()"
+            >
+              @if (submitting()) {
+                Fiók létrehozása...
+              } @else {
+                Fiók létrehozása és belépés
+              }
             </button>
           </form>
 
