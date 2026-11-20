@@ -5,8 +5,8 @@
   </div>
 
   <div class="header-actions">
-    <a routerLink="/courses" class="btn btn-secondary">Tárgyak kezelése</a>
-    <a routerLink="/assessments" class="btn btn-primary">Új számonkérés</a>
+    <a routerLink="/app/courses" class="btn btn-secondary">Tárgyak kezelése</a>
+    <a routerLink="/app/assessments" class="btn btn-primary">Új számonkérés</a>
   </div>
 </header>
 
@@ -115,7 +115,7 @@
         <h2 class="section-title">Közelgő számonkérések</h2>
         <p class="section-subtitle">Időrendben a következő nyitott feladatok</p>
       </div>
-      <a routerLink="/assessments" class="panel-link">Teljes lista</a>
+      <a routerLink="/app/assessments" class="panel-link">Teljes lista</a>
     </div>
 
     @if (upcomingPreview().length === 0) {
@@ -196,7 +196,7 @@
           <h2 class="section-title">Ütközésfigyelő</h2>
           <p class="section-subtitle">Automatikus elemzés eredménye</p>
         </div>
-        <a routerLink="/conflicts" class="panel-link">Részletek</a>
+        <a routerLink="/app/conflicts" class="panel-link">Részletek</a>
       </div>
 
       @if (topConflicts().length === 0) {
@@ -238,7 +238,7 @@
           <h2 class="section-title">Tárgyak terhelése</h2>
           <p class="section-subtitle">Nyitott feladatok kurzusonként</p>
         </div>
-        <a routerLink="/courses" class="panel-link">Órarend</a>
+        <a routerLink="/app/courses" class="panel-link">Órarend</a>
       </div>
 
       @if (courseSummaries().length === 0) {

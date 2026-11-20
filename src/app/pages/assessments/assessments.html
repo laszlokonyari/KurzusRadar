@@ -18,7 +18,7 @@
         </button>
       }
     } @else {
-      <a routerLink="/courses" class="btn btn-primary">Előbb vegyél fel tárgyat</a>
+      <a routerLink="/app/courses" class="btn btn-primary">Előbb vegyél fel tárgyat</a>
     }
   </div>
 </header>
@@ -287,7 +287,7 @@
         ({{ store.assessments().length }} összesen)
       }
     </span>
-    <a routerLink="/conflicts" class="panel-link">Ütközésdiagnosztika megnyitása</a>
+    <a routerLink="/app/conflicts" class="panel-link">Ütközésdiagnosztika megnyitása</a>
   </div>
 
   @if (store.courses().length === 0) {
@@ -296,7 +296,7 @@
       <p class="empty-copy">
         Előbb vegyél fel legalább egy tárgyat a Tárgyak és órarend oldalon, utána tudsz hozzá ZH-kat és beadandókat rendelni.
       </p>
-      <a routerLink="/courses" class="btn btn-primary">Ugrás a tárgyakhoz</a>
+      <a routerLink="/app/courses" class="btn btn-primary">Ugrás a tárgyakhoz</a>
     </div>
   } @else if (filteredAssessments().length === 0) {
     <div class="empty-state">

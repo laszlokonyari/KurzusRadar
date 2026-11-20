@@ -1,0 +1,235 @@
+<div class="app-shell">
+  <header class="mobile-topbar">
+    <button
+      type="button"
+      class="menu-trigger"
+      (click)="toggleMobileMenu()"
+      aria-label="Navigáció megnyitása"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
+
+    <div class="mobile-brand">
+      <span class="brand-mark">KR</span>
+      <span class="brand-name">KurzusRadar</span>
+    </div>
+
+    <a
+      routerLink="/app/conflicts"
+      class="mobile-status-pill"
+      [class.is-critical]="conflictSummaryState() === 'critical'"
+      [class.is-warning]="conflictSummaryState() === 'warning'"
+    >
+      <span class="mono">{{ store.conflicts().length }}</span>
+    </a>
+  </header>
+
+  @if (mobileMenuOpen()) {
+    <div class="sidebar-backdrop" (click)="closeMobileMenu()"></div>
+  }
+
+  <aside class="sidebar" [class.is-open]="mobileMenuOpen()">
+    <div class="sidebar-header">
+      <a routerLink="/" class="brand-lockup" (click)="closeMobileMenu()">
+        <span class="brand-mark">KR</span>
+        <div class="brand-copy">
+          <span class="brand-name">KurzusRadar</span>
+          <span class="brand-meta mono">{{ activeSemester() }}</span>
+        </div>
+      </a>
+
+      <button
+        type="button"
+        class="sidebar-close"
+        (click)="closeMobileMenu()"
+        aria-label="Menü bezárása"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="session-badge-wrap">
+      @if (auth.isDemo()) {
+        <div class="session-card is-demo">
+          <span class="session-tag mono">ÉLŐ DEMÓ</span>
+          <span class="session-sub">Elkülönített teszt munkaterület</span>
+        </div>
+      } @else if (auth.currentUser(); as user) {
+        <div class="session-card">
+          <span class="session-name">{{ user.name }}</span>
+          <span class="session-sub mono">{{ user.email }}</span>
+        </div>
+      }
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Fő navigáció">
+      <div class="nav-section-label">Munkaterület</div>
+
+      <a
+        routerLink="/app/dashboard"
+        routerLinkActive="is-active"
+        class="nav-item"
+        (click)="closeMobileMenu()"
+      >
+        <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <rect x="3" y="3" width="7" height="9" rx="1" />
+          <rect x="14" y="3" width="7" height="5" rx="1" />
+          <rect x="14" y="12" width="7" height="9" rx="1" />
+          <rect x="3" y="16" width="7" height="5" rx="1" />
+        </svg>
+        <span class="nav-label">Áttekintés</span>
+      </a>
+
+      <a
+        routerLink="/app/courses"
+        routerLinkActive="is-active"
+        class="nav-item"
+        (click)="closeMobileMenu()"
+      >
+        <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+        <span class="nav-label">Tárgyak és órarend</span>
+        <span class="nav-counter mono">{{ store.courses().length }}</span>
+      </a>
+
+      <a
+        routerLink="/app/assessments"
+        routerLinkActive="is-active"
+        class="nav-item"
+        (click)="closeMobileMenu()"
+      >
+        <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+        <span class="nav-label">ZH-k és beadandók</span>
+        <span class="nav-counter mono">{{ store.activeAssessmentsCount() }}</span>
+      </a>
+
+      <div class="nav-section-label nav-section-spaced">Diagnosztika</div>
+
+      <a
+        routerLink="/app/conflicts"
+        routerLinkActive="is-active"
+        class="nav-item"
+        (click)="closeMobileMenu()"
+      >
+        <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <span class="nav-label">Ütközésvizsgálat</span>
+        <span
+          class="nav-counter mono"
+          [class.is-critical]="conflictSummaryState() === 'critical'"
+          [class.is-warning]="conflictSummaryState() === 'warning'"
+        >
+          {{ store.conflicts().length }}
+        </span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="semester-stat">
+        <span class="stat-caption">Aktív félév terhelése</span>
+        <div class="stat-row">
+          <span class="stat-value mono">{{ store.totalCredits() }} kr</span>
+          <span class="stat-divider"></span>
+          <span class="stat-sub mono">{{ store.activeAssessmentsCount() }} nyitott</span>
+        </div>
+      </div>
+
+      @if (actionFeedback(); as feedback) {
+        <div class="feedback-pill">{{ feedback }}</div>
+      }
+
+      @if (confirmClearOpen()) {
+        <div class="clear-confirm-box">
+          <span class="clear-confirm-copy">Minden tárgy és feladat törlődik ebből a munkaterületből.</span>
+          <div class="clear-confirm-actions">
+            <button
+              type="button"
+              class="sidebar-btn"
+              (click)="cancelClearWorkspace()"
+            >
+              Mégse
+            </button>
+            <button
+              type="button"
+              class="sidebar-btn is-danger"
+              (click)="confirmClearWorkspace()"
+            >
+              Kiürítés
+            </button>
+          </div>
+        </div>
+      } @else {
+        <div class="footer-actions">
+          @if (auth.isDemo()) {
+            <button
+              type="button"
+              class="sidebar-btn"
+              (click)="handleResetDemo()"
+            >
+              Demó adatok visszaállítása
+            </button>
+          }
+
+          <button
+            type="button"
+            class="sidebar-btn"
+            (click)="requestClearWorkspace()"
+            [disabled]="store.courses().length === 0 && store.assessments().length === 0"
+          >
+            Munkaterület ürítése
+          </button>
+
+          <button
+            type="button"
+            class="sidebar-btn is-muted"
+            (click)="handleExitSession()"
+          >
+            @if (auth.isDemo()) {
+              Kilépés a kezdőlapra
+            } @else {
+              Kijelentkezés
+            }
+          </button>
+        </div>
+      }
+    </div>
+  </aside>
+
+  <main class="main-stage">
+    @if (auth.isDemo()) {
+      <div class="demo-banner">
+        <div class="demo-banner-inner">
+          <span class="demo-banner-text">
+            <strong>Élő demó módban vagy.</strong> A módosítások csak a böngésződ demó tárterületére mentődnek.
+          </span>
+          <button
+            type="button"
+            class="demo-cta-btn"
+            (click)="goToRegisterFromDemo()"
+          >
+            Saját fiók létrehozása (üres lappal)
+          </button>
+        </div>
+      </div>
+    }
+
+    <div class="stage-container">
+      <router-outlet />
+    </div>
+  </main>
+</div>
