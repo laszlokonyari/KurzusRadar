@@ -1,4 +1,275 @@
-<section class="page-placeholder">
-  <h1>Áttekintés</h1>
-  <p>Irányítópult modul előkészítve.</p>
+<header class="page-header">
+  <div class="header-copy">
+    <span class="header-eyebrow mono">{{ todayLabel() }}</span>
+    <h1 class="page-title">Féléves áttekintés</h1>
+  </div>
+
+  <div class="header-actions">
+    <a routerLink="/courses" class="btn btn-secondary">Tárgyak kezelése</a>
+    <a routerLink="/assessments" class="btn btn-primary">Új számonkérés</a>
+  </div>
+</header>
+
+<section class="kpi-strip surface-card" aria-label="Főbb mutatók">
+  <div class="kpi-cell">
+    <span class="kpi-label">Aktív tárgyak</span>
+    <div class="kpi-primary-row">
+      <span class="kpi-value mono">{{ store.courses().length }}</span>
+      <span class="kpi-meta mono">{{ store.totalCredits() }} kredit</span>
+    </div>
+  </div>
+
+  <div class="kpi-cell">
+    <span class="kpi-label">Közelgő 14 nap</span>
+    <div class="kpi-primary-row">
+      <span class="kpi-value mono">{{ nextFourteenDaysCount() }}</span>
+      <span class="kpi-meta mono">{{ store.activeAssessmentsCount() }} nyitott összesen</span>
+    </div>
+  </div>
+
+  <div
+    class="kpi-cell"
+    [class.is-critical]="store.criticalConflicts().length > 0"
+    [class.is-warning]="store.criticalConflicts().length === 0 && store.warningConflicts().length > 0"
+  >
+    <span class="kpi-label">Aktív ütközések</span>
+    <div class="kpi-primary-row">
+      <span class="kpi-value mono">{{ store.conflicts().length }}</span>
+      <span class="kpi-meta mono">
+        @if (store.criticalConflicts().length > 0) {
+          {{ store.criticalConflicts().length }} kritikus
+        } @else if (store.warningConflicts().length > 0) {
+          {{ store.warningConflicts().length }} figyelmeztetés
+        } @else {
+          ütközésmentes
+        }
+      </span>
+    </div>
+  </div>
+
+  <div class="kpi-cell">
+    <span class="kpi-label">Teljesítés</span>
+    <div class="kpi-primary-row">
+      <span class="kpi-value mono">{{ completionPercent() }}%</span>
+      <span class="kpi-meta mono">
+        {{ completedAssessmentsCount() }}/{{ totalAssessmentsCount() }} lezárva
+      </span>
+    </div>
+  </div>
 </section>
+
+<section class="load-strip surface-card" aria-label="Következő 14 nap terhelése">
+  <div class="section-head">
+    <div>
+      <h2 class="section-title">14 napos terhelési profil</h2>
+      <p class="section-subtitle">
+        Napi határidők és az ütközésvizsgáló aktuális státusza
+      </p>
+    </div>
+
+    <div class="strip-legend">
+      <span class="legend-item">
+        <span class="legend-swatch swatch-critical"></span>
+        Kritikus
+      </span>
+      <span class="legend-item">
+        <span class="legend-swatch swatch-warning"></span>
+        Figyelmeztetés
+      </span>
+      <span class="legend-item">
+        <span class="legend-swatch swatch-normal"></span>
+        Tervezett
+      </span>
+    </div>
+  </div>
+
+  <div class="strip-grid">
+    @for (day of loadStripDays(); track day.iso) {
+      <div
+        class="strip-cell"
+        [class.is-today]="day.isToday"
+        [class.is-weekend]="day.isWeekend"
+        [class.sev-critical]="day.severity === 'critical'"
+        [class.sev-warning]="day.severity === 'warning'"
+        [class.sev-normal]="day.severity === 'normal'"
+        [title]="day.iso + ': ' + day.count + ' esemény, ' + day.totalWeight + '% súly'"
+      >
+        <span class="strip-dow">{{ day.dayShort }}</span>
+        <span class="strip-day mono">{{ day.dayNumber }}</span>
+        <span class="strip-indicator">
+          @if (day.count > 0) {
+            <span class="strip-count mono">{{ day.count }}</span>
+          } @else {
+            <span class="strip-dash">–</span>
+          }
+        </span>
+      </div>
+    }
+  </div>
+</section>
+
+<div class="dashboard-grid">
+  <section class="surface-card panel-main">
+    <div class="panel-header">
+      <div>
+        <h2 class="section-title">Közelgő számonkérések</h2>
+        <p class="section-subtitle">Időrendben a következő nyitott feladatok</p>
+      </div>
+      <a routerLink="/assessments" class="panel-link">Teljes lista</a>
+    </div>
+
+    @if (upcomingPreview().length === 0) {
+      <div class="empty-block">
+        <p class="empty-title">Nincs nyitott számonkérés</p>
+        <p class="empty-copy">
+          Minden rögzített ZH és beadandó lezárásra került, vagy még nem vettél fel eseményt.
+        </p>
+      </div>
+    } @else {
+      <div class="upcoming-list">
+        @for (item of upcomingPreview(); track item.id) {
+          <article class="upcoming-row">
+            <span
+              class="course-stripe"
+              [style.background-color]="getCourseColor(item.courseId)"
+            ></span>
+
+            <div class="upcoming-body">
+              <div class="upcoming-meta">
+                <span class="course-code mono">
+                  {{ getCourse(item.courseId)?.code ?? 'ISMERETLEN' }}
+                </span>
+                <span class="badge badge-neutral">{{ typeLabels[item.type] }}</span>
+                <span class="weight-pill mono">{{ item.weightPercent }}%</span>
+
+                @if (getHighestSeverity(item.id) === 'critical') {
+                  <span class="badge badge-critical">Ütközik</span>
+                } @else if (getHighestSeverity(item.id) === 'warning') {
+                  <span class="badge badge-warning">Figyelmeztetés</span>
+                }
+              </div>
+
+              <h3 class="upcoming-title">{{ item.title }}</h3>
+
+              <div class="upcoming-timing mono">
+                <span>{{ formatShortDate(item.date) }}</span>
+                @if (item.startTime && item.endTime) {
+                  <span class="dot-sep"></span>
+                  <span>{{ item.startTime }}–{{ item.endTime }}</span>
+                }
+                @if (item.location) {
+                  <span class="dot-sep"></span>
+                  <span>{{ item.location }}</span>
+                }
+              </div>
+            </div>
+
+            <div class="upcoming-controls">
+              <span
+                class="relative-badge mono"
+                [class.is-overdue]="isOverdue(item.date)"
+              >
+                {{ formatRelativeDay(item.date) }}
+              </span>
+
+              <select
+                class="inline-status-select"
+                [value]="item.status"
+                (change)="handleStatusChange(item.id, $event)"
+                [attr.aria-label]="item.title + ' státusz módosítása'"
+              >
+                @for (status of statusOptions; track status) {
+                  <option [value]="status">{{ statusLabels[status] }}</option>
+                }
+              </select>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <aside class="panel-side">
+    <section class="surface-card side-card">
+      <div class="panel-header">
+        <div>
+          <h2 class="section-title">Ütközésfigyelő</h2>
+          <p class="section-subtitle">Automatikus elemzés eredménye</p>
+        </div>
+        <a routerLink="/conflicts" class="panel-link">Részletek</a>
+      </div>
+
+      @if (topConflicts().length === 0) {
+        <div class="clear-state">
+          <span class="badge badge-success">Rendben</span>
+          <p class="clear-copy">
+            Jelenleg nincs időpont-átfedés, órarendi ütközés vagy napi terhelési csúcs az aktív események között.
+          </p>
+        </div>
+      } @else {
+        <div class="conflict-stack">
+          @for (conflict of topConflicts(); track conflict.id) {
+            <div
+              class="conflict-item"
+              [class.is-critical]="conflict.severity === 'critical'"
+              [class.is-warning]="conflict.severity === 'warning'"
+            >
+              <div class="conflict-top">
+                <span
+                  class="badge"
+                  [class.badge-critical]="conflict.severity === 'critical'"
+                  [class.badge-warning]="conflict.severity === 'warning'"
+                >
+                  {{ formatCategory(conflict.category) }}
+                </span>
+                <span class="conflict-date mono">{{ formatShortDate(conflict.date) }}</span>
+              </div>
+              <p class="conflict-title">{{ conflict.title }}</p>
+              <p class="conflict-desc">{{ conflict.description }}</p>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="surface-card side-card">
+      <div class="panel-header">
+        <div>
+          <h2 class="section-title">Tárgyak terhelése</h2>
+          <p class="section-subtitle">Nyitott feladatok kurzusonként</p>
+        </div>
+        <a routerLink="/courses" class="panel-link">Órarend</a>
+      </div>
+
+      @if (courseSummaries().length === 0) {
+        <div class="empty-block compact">
+          <p class="empty-copy">Még nincs felvett tárgy ebben a félévben.</p>
+        </div>
+      } @else {
+        <div class="course-list">
+          @for (entry of courseSummaries(); track entry.course.id) {
+            <div class="course-row">
+              <div class="course-row-left">
+                <span
+                  class="course-dot"
+                  [style.background-color]="entry.color"
+                ></span>
+                <div class="course-row-copy">
+                  <span class="course-row-name">{{ entry.course.name }}</span>
+                  <span class="course-row-code mono">
+                    {{ entry.course.code }} · {{ entry.course.credits }} kr
+                  </span>
+                </div>
+              </div>
+
+              <div class="course-row-right mono">
+                <span class="course-open-count">{{ entry.openCount }} db</span>
+                <span class="course-open-weight">{{ entry.openWeight }}%</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+  </aside>
+</div>
