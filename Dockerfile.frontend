@@ -1,0 +1,15 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npx ng build --configuration=production --output-path=dist/app
+RUN mkdir -p /out && if [ -d dist/app/browser ]; then cp -r dist/app/browser/. /out; else cp -r dist/app/. /out; fi
+
+FROM caddy:2-alpine
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /out /srv
+
+EXPOSE 80 443
